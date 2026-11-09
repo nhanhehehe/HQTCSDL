@@ -10,3 +10,25 @@ backend/.pytest_cache/
 uav_iot_farm_monitoring/gateway/include/config.h
 uav_iot_farm_monitoring/gateway/data/queue.json
 uav_iot_farm_monitoring/backend/.pytest_cache/
+
+# Local-only artefacts outside the Farm IoT source tree.
+/058206001113_Nguyễn Khắc Trường_BT1.docx
+/058206001113_Nguyễn Khắc Trường_BT1.pdf
+/Bai_1_lich_tuan_tu.docx
+/Bai_2_lich_giao_tac.docx
+/MSSV_HOTEN_TSQL.sql
+/SQL_Demo_CoLap_NguyenKhacTruong/
+/build_bai1.py
+/build_bai2.py
+/build_combined.py
+/docs/
+/qa_bai1/
+/qa_bai1_v2/
+/qa_bai2/
+/qa_combined/
+/qa_combined_v2/
+/qa_font_t/
+/qa_part4/
+/qa_part4_v2/
+/update_font_and_t.py
+/update_part4.py
