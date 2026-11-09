@@ -1,0 +1,17 @@
+USE [IsolationLevelDemo_NguyenKhacTruong];
+GO
+
+CREATE OR ALTER PROCEDURE dbo.nt_RepeatableRead_T1
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+    BEGIN TRANSACTION;
+    SELECT * FROM dbo.TaiKhoan WHERE MaTK = 'A001';
+    WAITFOR DELAY '00:00:10';
+    SELECT * FROM dbo.TaiKhoan WHERE MaTK = 'A001';
+    COMMIT TRANSACTION;
+END;
+GO
+
+EXEC dbo.nt_RepeatableRead_T1;

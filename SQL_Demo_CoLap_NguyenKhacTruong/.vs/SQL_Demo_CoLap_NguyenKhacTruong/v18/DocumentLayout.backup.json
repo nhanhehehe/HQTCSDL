@@ -1,0 +1,116 @@
+{
+  "Version": 1,
+  "WorkspaceRootPath": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\",
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\00_KhoiTao.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:00_KhoiTao.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\02_ReadCommitted_CacLoiConLai.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:02_ReadCommitted_CacLoiConLai.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\03_RepeatableRead.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:03_RepeatableRead.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\04_Serializable_Phantom.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:04_Serializable_Phantom.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\05_Updlock_LostUpdate.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:05_Updlock_LostUpdate.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\01_DirtyRead_ReadCommitted.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:01_DirtyRead_ReadCommitted.sql||{B5A506EB-11BE-4782-9A18-21265C2CA0B4}"
+    }
+  ],
+  "DocumentGroupContainers": [
+    {
+      "Orientation": 0,
+      "VerticalTabListWidth": 256,
+      "DocumentGroups": [
+        {
+          "DockedWidth": 200,
+          "SelectedChildIndex": 4,
+          "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "05_Updlock_LostUpdate.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (60))",
+              "DocumentMoniker": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\05_Updlock_LostUpdate.sql",
+              "RelativeDocumentMoniker": "05_Updlock_LostUpdate.sql",
+              "ToolTip": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\05_Updlock_LostUpdate.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (60))",
+              "RelativeToolTip": "05_Updlock_LostUpdate.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (60))",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000826|",
+              "WhenOpened": "2026-10-26T03:48:02.609Z",
+              "EditorCaption": " - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (60))"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "04_Serializable_Phantom.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (57))",
+              "DocumentMoniker": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\04_Serializable_Phantom.sql",
+              "RelativeDocumentMoniker": "04_Serializable_Phantom.sql",
+              "ToolTip": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\04_Serializable_Phantom.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (57))",
+              "RelativeToolTip": "04_Serializable_Phantom.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (57))",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000826|",
+              "WhenOpened": "2026-10-26T03:47:54.197Z",
+              "EditorCaption": " - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (57))"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "03_RepeatableRead.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (56))",
+              "DocumentMoniker": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\03_RepeatableRead.sql",
+              "RelativeDocumentMoniker": "03_RepeatableRead.sql",
+              "ToolTip": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\03_RepeatableRead.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (56))",
+              "RelativeToolTip": "03_RepeatableRead.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (56))",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000826|",
+              "WhenOpened": "2026-10-26T03:47:44.985Z",
+              "EditorCaption": " - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (56))"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "02_ReadCommitted_CacLoiConLai.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (55))",
+              "DocumentMoniker": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\02_ReadCommitted_CacLoiConLai.sql",
+              "RelativeDocumentMoniker": "02_ReadCommitted_CacLoiConLai.sql",
+              "ToolTip": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\02_ReadCommitted_CacLoiConLai.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (55))",
+              "RelativeToolTip": "02_ReadCommitted_CacLoiConLai.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (55))",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000826|",
+              "WhenOpened": "2026-10-26T03:47:36.405Z",
+              "EditorCaption": " - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (55))"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "00_KhoiTao.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (61))",
+              "DocumentMoniker": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\00_KhoiTao.sql",
+              "RelativeDocumentMoniker": "00_KhoiTao.sql",
+              "ToolTip": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\00_KhoiTao.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (61))",
+              "RelativeToolTip": "00_KhoiTao.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (61))",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000826|",
+              "WhenOpened": "2026-10-26T03:45:24.588Z",
+              "EditorCaption": " - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (61))"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "01_DirtyRead_ReadCommitted.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (52))",
+              "DocumentMoniker": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\01_DirtyRead_ReadCommitted.sql",
+              "RelativeDocumentMoniker": "01_DirtyRead_ReadCommitted.sql",
+              "ToolTip": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\ChatGPT\\H\u1EC7 qu\u1EA3n tr\u1ECB c\u01A1 s\u1EDF d\u1EEF li\u1EC7u\\SQL_Demo_CoLap_NguyenKhacTruong\\01_DirtyRead_ReadCommitted.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (52))",
+              "RelativeToolTip": "01_DirtyRead_ReadCommitted.sql - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (52))",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000826|",
+              "WhenOpened": "2026-10-26T03:47:20.941Z",
+              "EditorCaption": " - (localdb)\\MSSQLLocalDB.IsolationLevelDemo_NguyenKhacTruong (LAPTOP-80V84EQN\\User (52))"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

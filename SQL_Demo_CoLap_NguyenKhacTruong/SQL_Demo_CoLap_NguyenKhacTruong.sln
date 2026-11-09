@@ -1,0 +1,41 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{66A26720-8FB5-11D2-AA7E-00C04F688DDE}") = "SQL Demo Co Lap", "SQL Demo Co Lap", "{A1D8F16E-3C91-4D96-9B4A-2E9B7F7B2B01}"
+	ProjectSection(SolutionItems) = preProject
+		00_KhoiTao.sql = 00_KhoiTao.sql
+		06_ResetDuLieu.sql = 06_ResetDuLieu.sql
+		01_DirtyRead_T1.sql = 01_DirtyRead_T1.sql
+		01_DirtyRead_T2.sql = 01_DirtyRead_T2.sql
+		01_ReadCommitted_T2.sql = 01_ReadCommitted_T2.sql
+		02_UnrepeatableRead_T1.sql = 02_UnrepeatableRead_T1.sql
+		02_UnrepeatableRead_T2.sql = 02_UnrepeatableRead_T2.sql
+		02_PhantomRead_T1.sql = 02_PhantomRead_T1.sql
+		02_PhantomRead_T2.sql = 02_PhantomRead_T2.sql
+		02_LostUpdate_T1.sql = 02_LostUpdate_T1.sql
+		02_LostUpdate_T2.sql = 02_LostUpdate_T2.sql
+		03_RepeatableRead_T1.sql = 03_RepeatableRead_T1.sql
+		03_RepeatableRead_T2.sql = 03_RepeatableRead_T2.sql
+		04_Serializable_T1.sql = 04_Serializable_T1.sql
+		04_Serializable_T2.sql = 04_Serializable_T2.sql
+		05_Updlock_T1.sql = 05_Updlock_T1.sql
+		05_Updlock_T2.sql = 05_Updlock_T2.sql
+		README.md = README.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A1D8F16E-3C91-4D96-9B4A-2E9B7F7B2B01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1D8F16E-3C91-4D96-9B4A-2E9B7F7B2B01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1D8F16E-3C91-4D96-9B4A-2E9B7F7B2B01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1D8F16E-3C91-4D96-9B4A-2E9B7F7B2B01}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

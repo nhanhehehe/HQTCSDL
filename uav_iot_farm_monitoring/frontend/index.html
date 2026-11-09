@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Farm IoT Monitor</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="container">
+    <section id="login-card" class="card narrow">
+      <h1>Farm IoT Monitor</h1>
+      <p>Đăng nhập để xem dữ liệu cảm biến và đợt thu thập.</p>
+      <form id="login-form">
+        <label>Tài khoản<input id="username" value="admin" required></label>
+        <label>Mật khẩu<input id="password" type="password" value="Admin@123" required></label>
+        <button type="submit">Đăng nhập</button>
+      </form>
+      <p id="login-error" class="error" aria-live="polite"></p>
+    </section>
+
+    <section id="app" hidden>
+      <header>
+        <div><h1>Farm IoT Monitor</h1><p id="identity"></p></div>
+        <button id="logout" class="secondary">Đăng xuất</button>
+      </header>
+      <nav>
+        <button data-view="dashboard" class="active">Dashboard</button>
+        <button data-view="farms">Khu vực</button>
+        <button data-view="measurements">Dữ liệu</button>
+        <button data-view="devices">Thiết bị</button>
+        <button data-view="missions">Đợt thu thập</button>
+        <button data-view="alerts">Cảnh báo</button>
+        <button data-view="reports">Báo cáo</button>
+      </nav>
+      <section id="dashboard" class="view">
+        <div id="stats" class="stats"></div>
+        <article class="card"><h2>Bản đo mới nhất</h2><canvas id="chart" height="100"></canvas><div id="latest"></div></article>
+      </section>
+      <section id="farms" class="view" hidden><article class="card"><h2>Farm, zone và vị trí thiết bị</h2><div id="farms-table"></div></article></section>
+      <section id="measurements" class="view" hidden><article class="card"><h2>Lịch sử dữ liệu</h2><div id="measurement-table"></div></article></section>
+      <section id="devices" class="view" hidden><article class="card"><h2>Node và gateway</h2><div id="devices-table"></div></article></section>
+      <section id="missions" class="view" hidden><article class="card"><h2>Đợt thu thập</h2><div id="missions-table"></div></article></section>
+      <section id="alerts" class="view" hidden><article class="card"><h2>Cảnh báo</h2><div id="alerts-table"></div></article></section>
+      <section id="reports" class="view" hidden><article class="card"><h2>Báo cáo tổng hợp</h2><div id="reports-table"></div></article></section>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
