@@ -1,0 +1,39 @@
+name: Repository workflow
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  branch-policy:
+    name: branch-policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate pull request route and branch name
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import sys
+
+          base = os.environ["PR_BASE"]
+          head = os.environ["PR_HEAD"]
+          same_repo = os.environ["PR_HEAD_REPO"] == os.environ["REPOSITORY"]
+          task = re.fullmatch(r"(feat|fix|refactor|test|docs|chore)/[1-9][0-9]*-[a-z0-9]+(?:-[a-z0-9]+)*", head)
+          bootstrap = same_repo and head == "chore/bootstrap-repository-workflow"
+          release = base == "main" and head == "develop" and same_repo
+          integration = base == "develop" and (task is not None or bootstrap or (head == "main" and same_repo))
+          if not (release or integration):
+              print("Invalid PR route/name. Task branches target develop; main accepts develop from this repository only.")
+              sys.exit(1)
+          print("PR branch policy passed. This check does not certify application, SQL Server or hardware tests.")
+          PY
