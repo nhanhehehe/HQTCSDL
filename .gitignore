@@ -1,34 +1,101 @@
+# =========================
+# Local configuration
+# =========================
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# =========================
+# Python / FastAPI
+# =========================
 .venv/
+venv/
 __pycache__/
 *.py[cod]
-.env
-*.db
-.pio/
-gateway/include/config.h
-gateway/data/queue.json
-backend/.pytest_cache/
-uav_iot_farm_monitoring/gateway/include/config.h
-uav_iot_farm_monitoring/gateway/data/queue.json
-uav_iot_farm_monitoring/backend/.pytest_cache/
+*.egg-info/
+.eggs/
 
-# Local-only artefacts outside the Farm IoT source tree.
-/058206001113_Nguyễn Khắc Trường_BT1.docx
-/058206001113_Nguyễn Khắc Trường_BT1.pdf
-/Bai_1_lich_tuan_tu.docx
-/Bai_2_lich_giao_tac.docx
-/MSSV_HOTEN_TSQL.sql
-/SQL_Demo_CoLap_NguyenKhacTruong/
-/build_bai1.py
-/build_bai2.py
-/build_combined.py
-/docs/
-/qa_bai1/
-/qa_bai1_v2/
-/qa_bai2/
-/qa_combined/
-/qa_combined_v2/
-/qa_font_t/
-/qa_part4/
-/qa_part4_v2/
-/update_font_and_t.py
-/update_part4.py
+# =========================
+# Tests / lint / coverage
+# =========================
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+coverage.xml
+junit.xml
+
+# =========================
+# React / TypeScript / Vite
+# =========================
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+
+# =========================
+# Build output
+# =========================
+build/
+
+# =========================
+# Local databases / backups
+# =========================
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.bak
+*.trn
+*.mdf
+*.ndf
+*.ldf
+
+# =========================
+# ESP32 / PlatformIO
+# =========================
+.pio/
+
+# Device configuration containing local credentials
+**/gateway/include/config.h
+**/node/include/config.h
+
+# Runtime queues, not source code
+**/gateway/data/queue.json
+**/node/data/queue.json
+
+# =========================
+# Logs / temporary files
+# =========================
+*.log
+*.tmp
+*.swp
+*.swo
+*~
+
+# =========================
+# IDE / editor
+# =========================
+.idea/
+.vs/
+
+# Keep useful shared VS Code configuration
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# =========================
+# Operating system
+# =========================
+.DS_Store
+Thumbs.db
+Desktop.ini
