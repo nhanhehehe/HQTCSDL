@@ -5,12 +5,22 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import BACKEND_DIR, Settings
 from app.core.db import Database
-from app.core.errors import http_error, problem, unexpected_error
+from app.core.errors import (
+    WebError,
+    http_error,
+    problem,
+    storage_error,
+    unexpected_error,
+    validation_error,
+    web_error,
+)
 
 logger = logging.getLogger("uvicorn.error.hqtcsdl")
 
@@ -28,6 +38,9 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
     app = FastAPI(title="HQTCSDL", version="0.1.0", lifespan=lifespan)
     app.state.database = database
     app.add_exception_handler(StarletteHTTPException, http_error)
+    app.add_exception_handler(WebError, web_error)
+    app.add_exception_handler(RequestValidationError, validation_error)
+    app.add_exception_handler(SQLAlchemyError, storage_error)
     app.add_exception_handler(Exception, unexpected_error)
 
     @app.middleware("http")
@@ -41,6 +54,8 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
             logger.error("request_failed request_id=%s", request.state.request_id)
             response = problem(request, 500, "Internal Server Error")
         response.headers["X-Request-ID"] = request.state.request_id
+        if request.url.path == "/api" or request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
         logger.info(
             "request_id=%s method=%s status=%s duration_ms=%.1f",
             request.state.request_id,

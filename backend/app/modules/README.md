@@ -12,3 +12,7 @@ hoặc chia sẻ session với thread. Không import router của module khác �
 `core` chứa cấu hình/kết nối/lỗi chung. Chưa có worker: khi hiện thực, một monitoring
 thread trong một API process, trạng thái công việc lưu SQL, lifecycle và health phải
 được kiểm chứng theo 03.3. Không tạo thread rỗng rồi coi là đã có giám sát.
+
+DTO/codec web, lỗi, clock và cách dùng transaction chung: xem
+[`docs/backend-contract.md`](../../../docs/backend-contract.md). Ingestion dùng
+contract 03.1 riêng, không dùng schema web để validate payload ESP.

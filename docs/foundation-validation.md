@@ -30,3 +30,31 @@ Còn cần trước khi nghiệm thu toàn bộ nền tảng:
 - Khi dựng worker: kiểm chứng một thread, dừng/restart, việc lưu bền vững và health khi worker chết.
 - Kiểm tra CI GitHub, review PR và đặt required checks phù hợp. CI không thay approval.
 - Kiểm thử AC/NFR từng luồng và phần cứng theo kế hoạch riêng.
+
+## G0-T04 — kiểm chứng contract Backend, 15/11/2026
+
+Issue #8; base develop `b0cb45a73ebff576a8d2637f07aca6423c653ccd` (PR #6 đã merge).
+Đối chiếu 03.5.1 Confluence v13 và G0-T04 tại 03.6. Hướng dẫn dùng code:
+[backend-contract.md](backend-contract.md).
+
+- Linux / Python 3.12.14; cài đúng backend/uv.lock, không đổi dependencies.
+- Ruff lint/format đạt; pytest: 78 passed, gồm 10 test scaffold và 68 case contract.
+- Alembic heads chạy đạt, chưa có revision; không tạo schema nghiệp vụ.
+- Test contract kiểm strict JSON/presence/null, BIGINT/Decimal không mất độ chính xác,
+  rowversion canonical 8 byte, UTC/range timezone, lỗi web/no-store/request ID,
+  SQL failure giả lập không lộ secret và biên response ingestion độc lập.
+- Có cảnh báo deprecation httpx từ Starlette TestClient như lần dựng khung.
+- SQL lỗi trong test T04 dùng giả lập; không chứng minh SQL transaction qua Python,
+  UQ/FK/locking/snapshot/nghiệp vụ hoặc hiệu năng đã đạt. Không gọi SQL trên máy Nhân.
+- Ingestion/auth routes trong tests chỉ là fixtures; không đưa API nghiệp vụ giả vào app.
+
+G0-T01 trên máy Nhân: bằng chứng SQL Server 2022 Express thật, hai DB dev/test,
+quyền app/migration, đọc/ghi/commit/rollback/SNAPSHOT và dọn bảng đã được Nhân
+cung cấp và ghi ở [03.6 mục 9](https://bengame2006.atlassian.net/wiki/spaces/HQTCSDL/pages/14647366).
+Nhân chọn dùng chung hai login theo vai trò trên hai DB; không tạo login test riêng.
+Phân biệt bằng chứng đó với môi trường Linux/CI không có SQL của lần dựng khung.
+
+Chưa chạy: Alembic M1/M2, transaction Python trên SQL Server thật, auth/browser,
+worker/hardware/NFR và máy thành viên thứ hai. Câu lower/upper number/string giữa
+mục 2 và ví dụ mục 10 của 03.5.1 cần đối chiếu trước code DTO monitoring; T04 không
+tự chốt điểm lệch đó. PR này chưa nghiệm thu toàn bộ nền tảng.
