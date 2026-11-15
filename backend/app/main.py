@@ -5,12 +5,13 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import BACKEND_DIR, Settings
 from app.core.db import Database
-from app.core.errors import http_error, problem, unexpected_error
+from app.core.errors import http_error, problem, unexpected_error, validation_error
 
 logger = logging.getLogger("uvicorn.error.hqtcsdl")
 
@@ -28,6 +29,7 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
     app = FastAPI(title="HQTCSDL", version="0.1.0", lifespan=lifespan)
     app.state.database = database
     app.add_exception_handler(StarletteHTTPException, http_error)
+    app.add_exception_handler(RequestValidationError, validation_error)
     app.add_exception_handler(Exception, unexpected_error)
 
     @app.middleware("http")
