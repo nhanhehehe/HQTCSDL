@@ -108,3 +108,29 @@ từ DB test: kiểm DB/login/current của dev trước khi áp dụng.
 - AC/NFR/browser/hardware cần bằng chứng riêng; không suy từ 16 test hoặc readiness.
 
 Hướng dẫn tái hiện: [SQL/cấu hình](development.md), [M1/seed](../database/README.md).
+
+### T05/T06/M2 — bổ sung source ngày 16/11/2026
+
+Nhánh triển khai `feat/3-auth-and-m2`, xuất phát từ HEAD `66de752`. Giữ nguyên
+`.env`, migration M1 và `seed_foundation.sql`; không tạo Admin, chạy seed, upgrade
+hay downgrade DB trong phiên triển khai này.
+
+- T05: Argon2id m19456KiB/t2/p1; login/session/logout, cookie/CSRF, SQL session guard,
+  recheck account và rotation/revoke cùng transaction, commit trước trả thành công.
+  Lệnh tạo Admin dùng getpass và kiểm DB/login riêng, không gọi khi startup.
+- T06: trạng thái auth/CSRF trong memory, loại response generation cũ, hết hạn tuyệt
+  đối, xác minh khi focus/resume và che nội dung riêng khi logout chưa được xác nhận.
+- M2: revision `b15e2c03a001`, bảy bảng, FK/index/CHECK và ba checkpoint; thêm state
+  rỗng cho Node M1 đã có, không cấu hình/period/ngưỡng giả. Chưa có M3 hoặc worker.
+- Kiểm tra: locked dependencies đồng bộ bằng uv local trong `.venv` với `--inexact`
+  để giữ package cài thêm; không cài công cụ toàn cục. Backend 42 test đạt; hai ca
+  SQL có opt-in chưa chạy. Frontend bốn test client đạt; typecheck/build đạt.
+- SQL offline được biên dịch theo dialect MSSQL cho upgrade/downgrade M2; chưa là
+  bằng chứng chạy DDL. Kết nối đọc thử runtime và test đều báo OperationalError
+  trong môi trường agent; không suy trạng thái revision/Admin/data ở DB thật.
+- Chưa kiểm browser thật, SQL locking/race hai kết nối, migration trên empty/existing
+  M1 và rollback/upgrade thật. Unit tests dùng transaction double, không dùng SQLite
+  để thay bằng chứng SQL Server. F01-AC01..14/E01-01..04 chưa nghiệm thu tích hợp.
+- Benchmark tùy chọn đã đo 20 verify: Windows 11/Python 3.12.16/AMD64 Family 25
+  Model 117, min 16.82ms, median 17.81ms, p95/max 35.99ms. Không dùng phép đo này
+  để kết luận đạt NFR; theo yêu cầu người dùng, benchmark không chặn hoàn thành.

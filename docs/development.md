@@ -6,8 +6,8 @@
 | `test` | `HQTCSDL_test_ten` | Fixture/simulator, tách khỏi đo thật |
 | `demo` | `HQTCSDL_demo` | Dữ liệu demo/thiết bị thật |
 
-Thay `ten` bằng tên thành viên. Ví dụ máy Nhân dùng `HQTCSDL_dev_nhan` và
-`HQTCSDL_test_nhan`. `HQ_ENV` chỉ là nhãn, **không tự đổi database**; URL mới
+Thay `ten` bằng tên thành viên, hoặc dùng tên DB riêng đã thống nhất cho môi trường.
+`HQ_ENV` chỉ là nhãn, **không tự đổi database**; URL mới
 quyết định đích. Hiện có seed SQL thủ công, chưa có runner/reset hoặc guard tự
 ngăn ghi nhầm DB. Luôn kiểm tra tên DB/login thực tế trước ghi/xóa.
 
@@ -197,7 +197,7 @@ chứng minh đã có bảng, migration, worker hoặc quyền ghi nghiệp vụ
 Thực hiện [hướng dẫn M1/seed](../database/README.md#ap-m1-va-seed): xác nhận DB test
 và login migration → heads/current → xem SQL → upgrade → kiểm 9 bảng/revision →
 seed SSMS → kiểm chạy lại 1/2/5. Downgrade xóa dữ liệu, chỉ kiểm trên DB test được
-phép bỏ dữ liệu. M1 đã có trong source, chưa có M2/M3. Không tự áp migration lúc API
+phép bỏ dữ liệu. Source có M1 và M2; M3 chưa triển khai. Không tự áp migration lúc API
 khởi động; không chạy `create_all()` thay versioning.
 
 ## Kiểm chứng SQL trên máy thành viên
@@ -224,7 +224,71 @@ không thay test transaction/race/rollback của từng tính năng qua Python.
 
 Vite dùng proxy cùng origin, không cần bật CORS rộng. URL dev proxy nằm ở
 `frontend/vite.config.ts` và không chứa credential. FE dùng đường tương đối `/api/...`;
-thiết kế phiên/CSRF được bổ sung theo F01, chưa có trong khung.
+phiên/CSRF dùng ba endpoint `/api/v1/auth/login`, `/session`, `/logout` theo FL-01 v8.
+
+### T05/T06 — cấu hình và tài khoản quản trị
+
+Giữ nguyên `.env` local; chỉ bổ sung biến còn thiếu sau khi đối chiếu. Không copy mẫu
+đè lên file đang có. `HQ_WEB_ORIGIN` mặc định `http://127.0.0.1:5173`, phải khớp chính
+xác origin của FE, không có dấu `/` cuối. Khi dùng build do Backend phục vụ, cấu hình
+origin theo URL Backend. `HQ_COOKIE_SECURE=false` chỉ cho HTTP local/LAN; HTTPS phải
+đặt `true`. Thay cấu hình cần restart Backend.
+
+Auth cần `HQ_CSRF_SECRET` riêng, ngẫu nhiên và giữ ổn định qua restart. Tái sử dụng
+secret local nếu đã có; không commit, in hoặc đưa secret vào frontend. Không có
+secret/DB thì auth không cấp phiên. `HQ_AUTH_TEST_DATABASE_URL` là URL SQL Server
+test tùy chọn, không tự thay thế URL runtime hoặc migration.
+
+Lệnh tạo Admin chạy riêng từ `backend`, dùng migration URL; không chạy lúc startup:
+
+```powershell
+uv run python -m app.modules.auth.create_admin Admin --database HQTCSDL_dev_ten
+```
+
+Thay `HQTCSDL_dev_ten` bằng tên DB thực tế của bạn và `Admin` bằng username muốn tạo.
+`--database` xác nhận đích, không thay DB trong `HQ_MIGRATION_DATABASE_URL`.
+Lệnh hỏi password và xác nhận bằng `getpass`, kiểm và hiển thị DB/login trước ghi.
+Username đã có bị từ chối; không thay password cũ. Chỉ chạy khi đã chủ ý chọn DB và
+cho phép tạo tài khoản; seed nền tảng không chứa Admin/password.
+
+Login gửi JSON username/password, `Origin` đúng cấu hình và `X-HQ-Client: web`.
+Logout gửi `Origin`, thêm `X-CSRF-Token` của phiên đang valid. Cookie `hq_session`
+HttpOnly/host-only/SameSite=Strict/Path=/api; session hết hạn tuyệt đối sau hai giờ
+theo giờ SQL, không gia hạn khi đọc. ID trả string, timestamps UTC Z millisecond.
+Mọi response auth có `Cache-Control: no-store`.
+
+FE giữ thông tin phiên/CSRF trong memory; không lưu token/password vào localStorage.
+Sau lỗi mạng login, dùng **Kiểm tra phiên** để xác minh cookie browser; không tự gửi
+lại mutation. Logout chưa được xác nhận sẽ xóa nội dung riêng và cho phép người dùng
+chủ động thử lại. Khi hết hạn/401/focus/resume, nội dung riêng phải qua xác minh phiên.
+
+### Kiểm tra auth và M2
+
+Các check Backend thông thường không kết nối SQL. Frontend có bộ kiểm API client nhỏ
+dùng Node có sẵn: `node --test tests/api-client.test.mjs` từ `frontend`.
+
+Hai ca SQL trong `backend/tests/test_sql_auth_m2.py` chỉ chạy khi người vận hành bật
+cờ. Phải tự áp M2 vào DB test trước, dùng URL test có quyền DML, xác nhận DB/login;
+không dùng DB dev/demo chứa dữ liệu cần giữ. Ví dụ từ `backend`:
+
+```powershell
+$env:HQ_RUN_SQL_TESTS = '1'
+$env:HQ_EXPECT_TEST_DATABASE = 'HQTCSDL_test_ten'
+uv run pytest tests/test_sql_auth_m2.py -v -s
+Remove-Item Env:HQ_RUN_SQL_TESTS
+Remove-Item Env:HQ_EXPECT_TEST_DATABASE
+```
+
+Fixture tạo hồ sơ mang mã `test-<uuid>`, runtime/state và dữ liệu đo có nhãn trong một
+transaction ngoài, rồi rollback; không migration, seed, commit hay xóa dữ liệu cũ.
+Identity có thể có khoảng trống sau rollback. Test này không thay kiểm race hai kết
+nối hoặc phép upgrade/downgrade thật. Browser cookie/proxy, focus/resume, expiry và
+logout mất response phải kiểm riêng; build/test client không chứng minh các ca đó.
+
+Benchmark là tùy chọn, không chặn triển khai:
+`uv run python -m app.modules.auth.benchmark --iterations 20`.
+Công cụ chỉ in môi trường/thời gian,
+không kết nối SQL và không đọc/in password hay hash. Không suy NFR đạt từ phép đo này.
 
 Backend phục vụ build FE cùng origin ở demo. `/api/*` và `/health/*` không rơi vào SPA;
 asset thiếu trả 404, build chưa có trả 503 tại trang web. Chạy một process, không reload.
