@@ -99,3 +99,9 @@ build/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+AGENTS.md
+docs/agent/*.md
+docs/agent/**/*.md
+docs/agent/*.docx
+docs/agent/**/*.docx

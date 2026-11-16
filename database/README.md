@@ -17,11 +17,11 @@ M1 `a70b8056608d_create_m1_foundation_tables.py` đã merge qua
 | Danh mục | MetricDefinition |
 
 `alembic_version` là bảng theo dõi revision, không phải bảng nghiệp vụ thứ chín.
-DB mới sau M1 có tổng 9 bảng. Hiện `alembic heads` phải có
-`a70b8056608d (head)`, không còn là scaffold trống. Nếu xuất hiện revision mới,
-đọc nội dung migration/PR tương ứng trước khi chạy `upgrade head`.
+DB mới sau M1 có tổng 9 bảng. Source hiện có head `b15e2c03a001` (M2);
+đọc phần M2 bên dưới trước khi chạy `upgrade head`. DB đã áp riêng M1 vẫn có
+current `a70b8056608d`, không có nghĩa M2 đã được áp.
 
-M2 (7 bảng runtime/config/đo) và M3 (4 bảng cảnh báo/audit) chưa triển khai. Có bảng
+M2 có trong source; M3 (4 bảng cảnh báo/audit) chưa triển khai. Có bảng
 Node trong M1 chưa có nghĩa Node registration đã sẵn sàng: thao tác tạo Node cần
 NodeRuntime/EvaluationState của M2 trong cùng transaction. M1 chưa tạo Admin,
 Gateway/Node hoặc khóa thiết bị.
@@ -50,8 +50,8 @@ chỉ đọc thông tin; nếu kết nối chưa đúng, sửa `.env` trước k
 ```powershell
 uv run alembic heads
 uv run alembic current
-uv run alembic upgrade head --sql
-uv run alembic upgrade head
+uv run alembic upgrade a70b8056608d --sql
+uv run alembic upgrade a70b8056608d
 uv run alembic current
 ```
 
@@ -59,7 +59,7 @@ uv run alembic current
 - `current`: revision của DB đang được URL migration trỏ đến; DB mới có thể không có output.
 - `--sql`: chỉ sinh SQL, chưa áp dụng. Đây là SQL từ base tới head, không tự đọc
   current của DB; dùng để review, không copy chạy lại vào DB đã có bảng.
-- `upgrade head`: áp các revision còn thiếu. Sau M1, current là `a70b8056608d (head)`.
+- `upgrade a70b8056608d`: chỉ áp tới M1. Current sau đó là `a70b8056608d`.
   Lệnh upgrade có thể không in nhiều thông tin do scaffold chưa cấu hình logging.
 
 Kiểm tra bằng SSMS trên đúng DB test (chọn dropdown hoặc chạy `USE [ten_db_test];`):
@@ -164,3 +164,32 @@ Không có script reset/drop database tự động.
   SQL Server để thay việc xác định phiên giữ khóa.
 
 Kết quả cụ thể và giới hạn kiểm chứng: [foundation-validation.md](../docs/foundation-validation.md).
+
+## M2 — schema đo, cấu hình và runtime
+
+Source có revision `b15e2c03a001`, nối tiếp M1 `a70b8056608d`. M2 thêm bảy bảng:
+Measurement, MeasurementValue, NodeConfigVersion, ThresholdSetting, MonitoringPeriod,
+NodeRuntime và EvaluationState; tổng 15 bảng nghiệp vụ. M1 và seed nền tảng giữ nguyên.
+
+Trước khi áp, xác nhận DB_NAME()/SUSER_SNAME() bằng migration URL, kiểm `alembic current`
+và dữ liệu cần bảo toàn. Không suy DB đã được áp từ việc source có revision. Từ `backend`:
+
+```powershell
+uv run alembic heads
+uv run alembic upgrade a70b8056608d:b15e2c03a001 --sql
+# Chỉ chạy lệnh sau khi đã chọn và cho phép thay đổi đúng DB:
+uv run alembic upgrade head
+```
+
+M2 thêm runtime/state rỗng cho Node M1 đã có: generation 0/0, ba checkpoint NULL,
+không tạo config, period hay ngưỡng mặc định. Việc tạo Node sau này phải thêm đúng
+một NodeRuntime và EvaluationState cùng transaction; chưa triển khai API đăng ký Node.
+Đúng năm Value/THRESHOLD setting, config đúng loại, pointer tới config hiện hành/period
+đang mở và khoảng lịch sử không chồng cần validation trong đường ghi nghiệp vụ sau này.
+CHECK/FK không tự bảo đảm các aggregate đó. FK ghép hiện bảo đảm pointer cùng Node.
+Không có FK đến M3/AlertEpisode khi bảng chưa tồn tại; codec checkpoint chưa được thực thi.
+
+Chỉ thử downgrade trên DB test được phép bỏ dữ liệu M2, về `a70b8056608d`, rồi upgrade
+lại; không downgrade base hay reset seed. Downgrade M2 xóa bảy bảng mới và dữ liệu của
+chúng, giữ tám bảng M1. Empty DB: áp M1 rồi M2; existing M1: M2 tái sử dụng hồ sơ hiện có.
+Fixture SQL có opt-in và rollback được mô tả ở [hướng dẫn phát triển](../docs/development.md).
