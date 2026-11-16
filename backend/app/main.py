@@ -11,7 +11,16 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import BACKEND_DIR, Settings
 from app.core.db import Database
-from app.core.errors import http_error, problem, unexpected_error, validation_error
+from app.core.errors import (
+    WebError,
+    http_error,
+    problem,
+    unexpected_error,
+    validation_error,
+    web_error,
+)
+from app.modules.auth.router import router as auth_router
+from app.modules.auth.service import AuthService
 
 logger = logging.getLogger("uvicorn.error.hqtcsdl")
 
@@ -28,6 +37,9 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
 
     app = FastAPI(title="HQTCSDL", version="0.1.0", lifespan=lifespan)
     app.state.database = database
+    app.state.settings = settings
+    app.state.auth = AuthService(database, settings)
+    app.add_exception_handler(WebError, web_error)
     app.add_exception_handler(StarletteHTTPException, http_error)
     app.add_exception_handler(RequestValidationError, validation_error)
     app.add_exception_handler(Exception, unexpected_error)
@@ -43,6 +55,8 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
             logger.error("request_failed request_id=%s", request.state.request_id)
             response = problem(request, 500, "Internal Server Error")
         response.headers["X-Request-ID"] = request.state.request_id
+        if request.url.path.startswith("/api/v1/auth/"):
+            response.headers["Cache-Control"] = "no-store"
         logger.info(
             "request_id=%s method=%s status=%s duration_ms=%.1f",
             request.state.request_id,
@@ -76,6 +90,8 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
             "scope": "foundation",
             "monitoring": "not_implemented",
         }
+
+    app.include_router(auth_router)
 
     @app.api_route(
         "/{path:path}",

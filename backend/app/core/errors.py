@@ -5,7 +5,18 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
 
-def problem(request: Request, status: int, title: str) -> JSONResponse:
+class WebError(Exception):
+    def __init__(self, status: int, code: str, message: str):
+        self.status = status
+        self.code = code
+        self.message = message
+
+
+async def web_error(request: Request, exc: WebError) -> JSONResponse:
+    return problem(request, exc.status, exc.message, exc.code)
+
+
+def problem(request: Request, status: int, title: str, code: str | None = None) -> JSONResponse:
     path = request.url.path
 
     is_web = path == "/api/v1" or path.startswith("/api/v1/")
@@ -27,7 +38,7 @@ def problem(request: Request, status: int, title: str) -> JSONResponse:
             status_code=status,
             content={
                 "error": {
-                    "code": codes.get(status, "REQUEST_FAILED"),
+                    "code": code or codes.get(status, "REQUEST_FAILED"),
                     "message": title,
                     "retryable": status == 503,
                 },
@@ -71,10 +82,13 @@ async def validation_error(
     is_ingestion = path == "/api/v1/ingestion" or path.startswith("/api/v1/ingestion/")
 
     if is_web and not is_ingestion:
+        fields = sorted(
+            {str(e["loc"][1]) for e in exc.errors() if len(e["loc"]) > 1} & {"username", "password"}
+        )
         return problem(
             request,
             400,
-            "Dữ liệu đầu vào không hợp lệ",
+            "Dữ liệu đầu vào không hợp lệ" + (": " + ", ".join(fields) if fields else ""),
         )
 
     return await request_validation_exception_handler(request, exc)

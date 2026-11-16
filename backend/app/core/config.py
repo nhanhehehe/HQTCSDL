@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -15,8 +15,36 @@ class Settings(BaseSettings):
     env: Literal["dev", "test", "demo"] = "dev"
     database_url: SecretStr | None = None
     migration_database_url: SecretStr | None = None
+    auth_test_database_url: SecretStr | None = None
+    web_origin: str = "http://127.0.0.1:5173"
+    csrf_secret: SecretStr | None = None
+    cookie_secure: bool = False
 
-    @field_validator("database_url", "migration_database_url")
+    @model_validator(mode="after")
+    def secure_https_cookie(self):
+        if self.web_origin.startswith("https://") and not self.cookie_secure:
+            raise ValueError("HTTPS requires HQ_COOKIE_SECURE=true")
+        return self
+
+    @field_validator("web_origin")
+    @classmethod
+    def origin_only(cls, value: str) -> str:
+        from urllib.parse import urlsplit
+
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("Configure an exact HTTP(S) origin without a path")
+        return value
+
+    @field_validator("database_url", "migration_database_url", "auth_test_database_url")
     @classmethod
     def sql_server_only(cls, value: SecretStr | None) -> SecretStr | None:
         if value is not None:
