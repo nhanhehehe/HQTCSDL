@@ -1,6 +1,7 @@
 import { FoundationStatus } from '../features/foundation/FoundationStatus'
 import { AuthProvider } from '../features/auth/AuthProvider'
 import { AuthPanel } from '../features/auth/AuthPanel'
+import { DevicesPanel } from '../features/devices/DevicesPanel'
 
 export function App() {
   return <AuthProvider><main>
@@ -9,6 +10,7 @@ export function App() {
     <p>Khung ứng dụng dùng chung cho nhóm Backend, Frontend và IoT.</p>
     <FoundationStatus />
     <AuthPanel />
-    <aside>Chức năng nghiệp vụ và giám sát cảnh báo sẽ được triển khai theo thiết kế luồng đã review.</aside>
+    <DevicesPanel />
+    <aside>Giám sát và cảnh báo sẽ được triển khai theo thiết kế luồng đã review.</aside>
   </main></AuthProvider>
 }
