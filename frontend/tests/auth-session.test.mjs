@@ -53,7 +53,7 @@ test('same-session revalidation retains session identity and does not cancel pro
   const verifying = auth.verify()
   assert.equal(auth.canWrite(), false)
   assert.equal(auth.getSnapshot().session, original)
-  await auth.verify() // focus and visibilitychange may fire together
+  await auth.verify() // overlapping manual verifications are serialized
   assert.equal(requests.filter(r => r.path === '/api/v1/auth/session').length, 2)
   check.resolve(json(original))
   await verifying
@@ -138,7 +138,7 @@ test('a new session replaces the form identity and invalidates responses from th
   await assert.rejects(reading, api.StaleResponse)
 })
 
-test('unknown logout immediately hides private state and cannot be undone by focus or login', async t => {
+test('unknown logout immediately hides private state and cannot be undone by manual verification or login', async t => {
   const { auth, requests, respond } = await fixture(t)
   const check = deferred()
   respond(() => check.promise)

@@ -14,16 +14,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     auth.start()
-    const resume = () => {
-      if (document.visibilityState === 'visible') void auth.verify()
-    }
-    window.addEventListener('focus', resume)
-    document.addEventListener('visibilitychange', resume)
-    return () => {
-      window.removeEventListener('focus', resume)
-      document.removeEventListener('visibilitychange', resume)
-      auth.stop()
-    }
+    return () => auth.stop()
   }, [auth])
 
   return <Context.Provider value={{ ...state, login: auth.login, logout: auth.logout,

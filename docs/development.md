@@ -260,9 +260,14 @@ Mọi response auth có `Cache-Control: no-store`.
 FE giữ thông tin phiên/CSRF trong memory; không lưu token/password vào localStorage.
 Sau lỗi mạng login, dùng **Kiểm tra phiên** để xác minh cookie browser; không tự gửi
 lại mutation. Logout chưa được xác nhận sẽ xóa nội dung riêng và cho phép người dùng
-chủ động thử lại. Khi hết hạn/401/focus/resume, nội dung riêng phải qua xác minh phiên.
+chủ động thử lại. Hết hạn hoặc nhận 401 sẽ xóa phiên và dữ liệu riêng.
 
-Khi focus/resume, xác minh lại cùng phiên giữ nguyên form thiết bị, hồ sơ đã chọn
+FE không gọi kiểm tra session theo focus/visibilitychange. Kiểm tra lúc mở ứng
+dụng và qua nút Kiểm tra phiên; mỗi request nghiệp vụ được Backend xác thực trực
+tiếp, không thêm một request session trước mỗi thao tác. Phiên bị thu hồi ở nơi
+khác có thể còn hiển thị dữ liệu cũ đến request tiếp theo; đây là đánh đổi đã chốt.
+Timer FE vẫn chặn phiên hết hạn theo expires_at đã nhận.
+Xác minh thủ công lại cùng phiên giữ nguyên form thiết bị, hồ sơ đã chọn
 và rowversion đang giữ; không tự tải bản mới để ghi đè dữ liệu đang nhập. Nút Lưu
 bị khóa trong lúc xác minh và sau lỗi mạng/503. Dùng **Kiểm tra phiên** để thử lại;
 chỉ phiên được xác minh hợp lệ mới mở lại thao tác ghi. Hết hạn/401/logout xóa
@@ -273,7 +278,7 @@ gồm revalidation, 401, expiry, response cũ, đổi phiên và logout chưa x�
 CI frontend cũng chạy lệnh này. Các test dùng fetch giả lập, không ghi SQL Server.
 
 Test web thủ công: hai tab cùng tải chi tiết một Node, A đổi tên và Lưu; quay về B
-phải giữ dữ liệu/version cũ, sau xác minh phiên nút Lưu được mở lại. B đổi tên và
+phải giữ dữ liệu/version cũ, không gọi session chỉ vì chuyển tab. B đổi tên và
 Lưu phải nhận 409 VERSION_CONFLICT; form giữ bản đang nhập, không tự ghi đè A.
 Dùng **Kiểm tra lại hồ sơ, giữ biểu mẫu** để đối chiếu, rồi chủ động chọn hồ sơ
 để nạp bản mới. Thử thêm xác minh lỗi mạng: form còn, Lưu khóa; có mạng lại và

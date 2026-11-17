@@ -202,7 +202,11 @@ npm run build
 trong cùng PR. Workflow CI có chạy các kiểm tra này. SQL auth/M2 tests cần opt-in
 trên DB test đã chọn; CI thông thường không kiểm SQL Server thật hoặc hardware.
 
-FE giữ form và version hồ sơ khi xác minh lại cùng phiên trên focus/resume. Trong
+FE không kiểm tra phiên chỉ vì chuyển tab/focus. Phiên được kiểm tra lúc mở ứng
+dụng hoặc khi chủ động bấm Kiểm tra phiên; Backend xác thực từng request được bảo
+vệ, FE xóa dữ liệu riêng khi nhận 401 và có timer hết hạn. Phiên bị thu hồi ở nơi
+khác chỉ được phát hiện khi có request tiếp theo hoặc kiểm tra phiên thủ công.
+FE giữ form và version hồ sơ khi xác minh lại cùng phiên. Trong
 lúc xác minh hoặc sau lỗi mạng/503, Lưu bị khóa; dùng **Kiểm tra phiên** để thử lại.
 401/hết hạn/logout/đổi phiên xóa dữ liệu riêng. Sau mất phản hồi mutation, giữ form
 để đối chiếu; không tự retry ghi hoặc dùng version mới để ghi đè. Xem
