@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     web_origin: str = "http://127.0.0.1:5173"
     csrf_secret: SecretStr | None = None
     cookie_secure: bool = False
+    area_manifest: str | None = None
+    cursor_secret: SecretStr | None = None
+    dataset_generation: str = "1"
 
     @model_validator(mode="after")
     def secure_https_cookie(self):

@@ -301,3 +301,40 @@ Python 3.12; Node 24; package-lock.json và uv.lock lưu dependency cụ thể.
 Cài uv theo [tài liệu chính thức](https://docs.astral.sh/uv/getting-started/installation/).
 `uv sync --locked` và `npm ci` là lệnh cài chuẩn. Nâng dependency trong PR riêng, chạy
 lại kiểm tra tương ứng; không thay lockfile chỉ để giải quyết conflict bằng cách xóa.
+
+## FL-02/FL-03 — khu vực và hồ sơ thiết bị
+
+Backend cần `HQ_AREA_MANIFEST` là chuỗi JSON như trong `backend/.env.example`.
+Thay mã mẫu bằng mã Farm/Zone thực tế đã được triển khai. Thiếu/sai manifest vẫn
+cho phép đăng nhập; `/api/v1/context` trả `200 INVALID` và issues. Tên/mô tả lấy
+trong DB. Không tự chạy seed, migration hoặc tạo tài khoản khi khởi động.
+
+Cấu hình `HQ_CURSOR_SECRET` bằng một secret ngẫu nhiên riêng, bền qua restart,
+khác CSRF secret. Đổi `HQ_DATASET_GENERATION` sau restore/reset dataset. Profile
+lists dùng keyset theo internal ID tăng dần, mặc định 50/tối đa 200; cursor ràng
+buộc route/filter/page size/order/generation. Mỗi trang là snapshot riêng.
+Không hứa danh sách bất biến xuyên các lần tải trang. Thiếu cursor secret chỉ
+được phát hiện khi cần phát hành/xác minh cursor; cấu hình trước khi vận hành.
+
+Sau đăng nhập: tải danh sách Node/Gateway, chọn để xem/sửa tên/ghi chú hoặc tạo
+hồ sơ mới. Node mới có Gateway NULL, không phải bằng chứng offline. Không có
+web API ghép/chuyển/xóa/toggle. Mất phản hồi giữ biểu mẫu; dùng kiểm tra lại hồ
+sơ để đối chiếu, rồi chọn bản mới trước khi ghi tiếp. Không tự ghi đè version.
+Gateway DTO có `farm:{id,code,name}` và `nodes:[{id,device_id,name}]`.
+
+GET context/profile chạy SNAPSHOT; SQL Server phải bật ALLOW_SNAPSHOT_ISOLATION.
+Node+NodeRuntime+EvaluationState tạo trong một transaction; không cần sửa M1/M2.
+Các API trả no-store. Không cần phần cứng để đăng ký hồ sơ.
+
+Kiểm tra offline mới: từ backend chạy `python -m pytest tests/test_devices.py`;
+chạy tiếp các lệnh Ruff/pytest và frontend typecheck/build/client tests đã nêu.
+SQL Server thật (rollback lỗi state, hai POST/PATCH, snapshot, logout/write race)
+và browser (reload, conflict, mất response) cần môi trường test được chọn và
+bằng chứng riêng; không coi unit mocks hoặc build là nghiệm thu các ca này.
+
+Verification for this implementation: 71 backend tests passed, 2 SQL opt-in tests
+skipped (`HQ_RUN_SQL_TESTS=0`); Ruff check/format and Alembic source heads passed.
+Frontend typecheck/build and 4 API-client tests passed. Backend tests ran with
+plugin autoload disabled outside the Windows sandbox after TestClient stalled
+inside it. Starlette emits its existing httpx deprecation warning. Real SQL and
+browser acceptance listed above has not been run; no DB writes were performed.
