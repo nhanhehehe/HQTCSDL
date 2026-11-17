@@ -21,10 +21,11 @@ DB mới sau M1 có tổng 9 bảng. Source hiện có head `b15e2c03a001` (M2);
 đọc phần M2 bên dưới trước khi chạy `upgrade head`. DB đã áp riêng M1 vẫn có
 current `a70b8056608d`, không có nghĩa M2 đã được áp.
 
-M2 có trong source; M3 (4 bảng cảnh báo/audit) chưa triển khai. Có bảng
-Node trong M1 chưa có nghĩa Node registration đã sẵn sàng: thao tác tạo Node cần
-NodeRuntime/EvaluationState của M2 trong cùng transaction. M1 chưa tạo Admin,
-Gateway/Node hoặc khóa thiết bị.
+M2 có trong source; M3 (4 bảng cảnh báo/audit) chưa triển khai. FL-03 đã có API tạo
+Node, thêm NodeRuntime/EvaluationState cùng transaction nên DB chỉ có M1 chưa đủ.
+Migrations không tạo Admin, Gateway/Node demo hoặc khóa thiết bị. Seed nền tảng
+chỉ thêm Farm/Zone/Metric; Admin tạo bằng [CLI riêng](../README.md#tao-tai-khoan-admin).
+Backend không tự áp migration hoặc seed lúc startup.
 
 <a id="ap-m1-va-seed"></a>
 
@@ -114,12 +115,17 @@ không phải giới hạn schema chỉ một Farm hoặc hai Zone.
 Chạy seed một đầu mối, không chạy đồng thời nhiều phiên. Script có transaction và
 `XACT_ABORT ON`; chưa có runner tự động, chưa tự xác nhận DB đích. Không coi nó là
 guard chống chạy nhầm DB. Không thêm mật khẩu, hash Admin chế tạo sẵn hoặc key thiết bị.
-Admin sẽ khởi tạo qua cấu hình riêng khi làm FL-01.
+Nếu đã đủ Farm/Zone/5 metric theo profile thì không cần seed lại. Script dùng mã
+FARM-01/INDOOR/OUTDOOR; profile dùng mã khác cần đối chiếu trước để tránh thêm khu
+vực mẫu ngoài ý muốn. Admin đã có CLI riêng theo FL-01, không nằm trong seed.
 
 ### 4. Kiểm chứng downgrade trên DB test mới, trước khi giữ dữ liệu
 
 Downgrade sau đây **xóa cả 8 bảng và dữ liệu M1**, gồm seed. Chỉ dùng trên DB test
 có dữ liệu được phép bỏ; xác nhận DB/login bằng bước 1 trước khi chạy:
+
+Phần này chỉ dành cho DB đang ở M1. Nếu DB đã ở M2, xem giới hạn downgrade M2 bên
+dưới; không chạy `downgrade base` theo thói quen để thử lại migration.
 
 ```powershell
 uv run alembic downgrade base
@@ -127,8 +133,9 @@ uv run alembic current
 ```
 
 Sau downgrade, `current` không có revision; chỉ còn bảng `alembic_version` (không
-có dòng version). Tạo lại bằng `uv run alembic upgrade head`, kiểm tra current và
-chạy seed lại. Không dùng downgrade như cách vận hành thường xuyên trên dev/demo.
+có dòng version). Nếu chỉ kiểm M1, tạo lại bằng `uv run alembic upgrade a70b8056608d`,
+kiểm current và chạy seed nếu thiếu dữ liệu nền. `upgrade head` sẽ áp cả M2, không
+chỉ M1. Không dùng downgrade như cách vận hành thường xuyên trên dev/demo.
 
 ### 5. Áp lên DB dev sau kiểm chứng
 
@@ -191,8 +198,9 @@ uv run alembic upgrade head
 ```
 
 M2 thêm runtime/state rỗng cho Node M1 đã có: generation 0/0, ba checkpoint NULL,
-không tạo config, period hay ngưỡng mặc định. Việc tạo Node sau này phải thêm đúng
-một NodeRuntime và EvaluationState cùng transaction; chưa triển khai API đăng ký Node.
+không tạo config, period hay ngưỡng mặc định. API đăng ký Node trong
+[devices](../backend/app/modules/devices/service.py) hiện thêm đúng một NodeRuntime
+và EvaluationState trong cùng transaction; chỉ trả thành công sau commit.
 Đúng năm Value/THRESHOLD setting, config đúng loại, pointer tới config hiện hành/period
 đang mở và khoảng lịch sử không chồng cần validation trong đường ghi nghiệp vụ sau này.
 CHECK/FK không tự bảo đảm các aggregate đó. FK ghép hiện bảo đảm pointer cùng Node.
