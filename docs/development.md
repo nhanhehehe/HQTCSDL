@@ -262,6 +262,24 @@ Sau lỗi mạng login, dùng **Kiểm tra phiên** để xác minh cookie brows
 lại mutation. Logout chưa được xác nhận sẽ xóa nội dung riêng và cho phép người dùng
 chủ động thử lại. Khi hết hạn/401/focus/resume, nội dung riêng phải qua xác minh phiên.
 
+Khi focus/resume, xác minh lại cùng phiên giữ nguyên form thiết bị, hồ sơ đã chọn
+và rowversion đang giữ; không tự tải bản mới để ghi đè dữ liệu đang nhập. Nút Lưu
+bị khóa trong lúc xác minh và sau lỗi mạng/503. Dùng **Kiểm tra phiên** để thử lại;
+chỉ phiên được xác minh hợp lệ mới mở lại thao tác ghi. Hết hạn/401/logout xóa
+dữ liệu riêng. Nếu cookie chuyển sang phiên khác, form của phiên cũ bị bỏ.
+
+Kiểm tra hồi quy FE từ `frontend/`: `npm test` chạy API client và vòng đời phiên,
+gồm revalidation, 401, expiry, response cũ, đổi phiên và logout chưa xác nhận.
+CI frontend cũng chạy lệnh này. Các test dùng fetch giả lập, không ghi SQL Server.
+
+Test web thủ công: hai tab cùng tải chi tiết một Node, A đổi tên và Lưu; quay về B
+phải giữ dữ liệu/version cũ, sau xác minh phiên nút Lưu được mở lại. B đổi tên và
+Lưu phải nhận 409 VERSION_CONFLICT; form giữ bản đang nhập, không tự ghi đè A.
+Dùng **Kiểm tra lại hồ sơ, giữ biểu mẫu** để đối chiếu, rồi chủ động chọn hồ sơ
+để nạp bản mới. Thử thêm xác minh lỗi mạng: form còn, Lưu khóa; có mạng lại và
+Kiểm tra phiên thành công thì Lưu mở lại. Test browser và SQL thật vẫn là bước
+nghiệm thu riêng, không suy từ Node tests/typecheck/build.
+
 ### Kiểm tra auth và M2
 
 Các check Backend thông thường không kết nối SQL. Frontend có bộ kiểm API client nhỏ

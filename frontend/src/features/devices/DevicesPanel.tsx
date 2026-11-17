@@ -12,6 +12,7 @@ export function DevicesPanel() {
 }
 
 function Devices({ csrf }: { csrf: string }) {
+  const { canWrite } = useAuth()
   const [area, setArea] = useState<Area | null>(null)
   const [kind, setKind] = useState<'nodes' | 'gateways'>('nodes')
   const [items, setItems] = useState<Profile[]>([])
@@ -73,7 +74,7 @@ function Devices({ csrf }: { csrf: string }) {
   }
 
   async function save() {
-    if (operation.current) return
+    if (operation.current || !canWrite()) return
     operation.current = true; setBusy(true)
     const active = generation.current
     const body = selected ? { name, notes: notes || null, expected_row_version: selected.row_version }
@@ -124,7 +125,7 @@ function Devices({ csrf }: { csrf: string }) {
       {!selected && kind === 'nodes' && <label>Zone <select required disabled={busy} value={zone} onChange={e => setZone(e.target.value)}><option value="">Chọn Zone</option>{area?.zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}</select></label>}
       <label>Tên <input required disabled={busy} value={name} onChange={e => setName(e.target.value)} /></label>
       <label>Ghi chú <textarea disabled={busy} value={notes} onChange={e => setNotes(e.target.value)} /></label>
-      <button disabled={busy || uncertain || (!selected && (kind === 'nodes' ? !zone : !area?.farm))}>Lưu</button>
+      <button disabled={busy || !canWrite() || uncertain || (!selected && (kind === 'nodes' ? !zone : !area?.farm))}>Lưu</button>
     </form>
     {selected && <div><p>{selected.zone?.name ?? selected.farm?.name} · Quyền tiếp nhận: {selected.receiving_enabled ? 'Bật' : 'Tắt'}</p>{kind === 'nodes' && <p>{selected.gateway?.code ?? 'Chưa liên kết Gateway'}</p>}<p>Lần cuối lưu bản mới: {selected.last_new_persisted_at ? new Date(selected.last_new_persisted_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : 'Chưa có dữ liệu'}</p><p>{selected.metrics?.map(m => `${m.metric_code} (${m.unit})`).join(', ')}</p>{selected.nodes && <p>Node liên quan: {selected.nodes.map(n => n.name).join(', ') || 'Chưa có liên kết'}</p>}</div>}
     <p role="status">{busy ? 'Đang xử lý…' : message}</p>

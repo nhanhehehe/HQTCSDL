@@ -20,7 +20,8 @@ export function AuthPanel() {
     {auth.session ? <>
       <p>Xin chào {auth.session.admin.username}.</p>
       <p>Phiên hết hạn lúc {new Date(auth.session.expires_at).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} (UTC+07:00).</p>
-      <p>Đã xác thực. Các chức năng quản trị sẽ được bổ sung theo phạm vi tiếp theo.</p>
+      <p>{auth.verified ? 'Phiên đã được xác minh.' : 'Đang giữ biểu mẫu; cần xác minh phiên trước khi lưu.'}</p>
+      <button className="secondary" disabled={auth.busy} onClick={() => void auth.verify()}>Kiểm tra phiên</button>
       <button disabled={auth.busy} onClick={() => void auth.logout()}>Đăng xuất</button>
     </> : auth.uncertainLogout ?
       <button disabled={auth.busy} onClick={() => void auth.logout()}>Thử đăng xuất lại</button> : <>
