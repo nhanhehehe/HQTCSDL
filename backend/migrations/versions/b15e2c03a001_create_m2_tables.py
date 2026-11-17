@@ -25,7 +25,8 @@ RANGES = {
 
 
 def bigint(name, nullable=False):
-    return sa.Column(name, sa.BigInteger(), nullable=nullable)
+    # Shared primary keys receive the parent ID; FKs are added after table creation.
+    return sa.Column(name, sa.BigInteger(), nullable=nullable, autoincrement=False)
 
 
 def identity(name):

@@ -171,6 +171,15 @@ Source có revision `b15e2c03a001`, nối tiếp M1 `a70b8056608d`. M2 thêm b�
 Measurement, MeasurementValue, NodeConfigVersion, ThresholdSetting, MonitoringPeriod,
 NodeRuntime và EvaluationState; tổng 15 bảng nghiệp vụ. M1 và seed nền tảng giữ nguyên.
 
+M2 đã sửa helper BIGINT để không tự suy diễn IDENTITY cho khóa dùng chung
+`NodeRuntime.node_id` và `EvaluationState.node_id`. Chỉ ba khóa
+`Measurement.measurement_id`, `NodeConfigVersion.config_id`,
+`MonitoringPeriod.period_id` tự sinh ID. Test offline kiểm SQL tạo bảng thực tế.
+Trước khi thử lại sau lỗi 544, xác nhận đúng DB, revision vẫn M1 và không còn
+bảy bảng M2 sau rollback. Nếu trạng thái khác, đối chiếu trước khi chạy tiếp;
+không dùng IDENTITY_INSERT, stamp hoặc xóa DB để bỏ qua lỗi. DB đã ghi nhận M2
+thành công cần kiểm schema và phương án sửa riêng: sửa file không cập nhật DB đó.
+
 Trước khi áp, xác nhận DB_NAME()/SUSER_SNAME() bằng migration URL, kiểm `alembic current`
 và dữ liệu cần bảo toàn. Không suy DB đã được áp từ việc source có revision. Từ `backend`:
 

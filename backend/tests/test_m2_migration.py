@@ -1,7 +1,9 @@
 import importlib.util
+import re
 from io import StringIO
 from pathlib import Path
 
+import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 
@@ -43,3 +45,21 @@ def test_m2_downgrade_removes_dependents_before_targets_only():
     assert sql.index("[MonitoringPeriod]") < sql.index("[NodeConfigVersion]")
     assert "DROP TABLE dbo.[Node];" not in sql
     assert "AdminAccount" not in sql
+
+
+@pytest.mark.parametrize(
+    ("table", "column", "generated"),
+    [
+        ("NodeRuntime", "node_id", False),
+        ("EvaluationState", "node_id", False),
+        ("Measurement", "measurement_id", True),
+        ("NodeConfigVersion", "config_id", True),
+        ("MonitoringPeriod", "period_id", True),
+    ],
+)
+def test_m2_identity_is_only_generated_for_owned_keys(table, column, generated):
+    sql = render_m2("upgrade")
+    table_ddl = sql.split(f"CREATE TABLE dbo.[{table}] (", 1)[1].split("\n);", 1)[0]
+    declaration = re.search(rf"^\s*{column}\s+BIGINT\b[^\n]*", table_ddl, re.MULTILINE)
+    assert declaration is not None
+    assert bool(re.search(r"\bIDENTITY\b", declaration.group())) is generated
