@@ -19,16 +19,16 @@ Code cũ đã lưu tại `archive/legacy-before-foundation`; khung này bắt đ
 | Phạm vi | Đã triển khai | Giới hạn |
 | --- | --- | --- |
 | FL-01 — Auth | Admin CLI, login/session/logout, cookie/CSRF và FE xác thực | Không có tài khoản mặc định, đăng ký web hoặc reset mật khẩu |
-| FL-02 — Khu vực | Đọc Farm/Zone theo manifest; trạng thái VALID/INVALID và issues | Không CRUD Farm/Zone; thiếu một Zone không chặn target khác còn hợp lệ |
-| FL-03 — Hồ sơ | Tạo/list/detail và sửa tên/ghi chú Node/Gateway; exact-code lookup, cursor, rowversion | Không ghép/chuyển/xóa thiết bị hoặc bật/tắt quyền qua web |
-| M1/M2 và PR-A — CSDL | 15 bảng nghiệp vụ; PR-A thêm archived_at/row_ver cho Farm/Zone | Chưa có CRUD/archive/restore khu vực; schema không chứng minh ingestion hay worker đã chạy |
+| FL-02 — Khu vực | CRUD & vòng đời `archive`/`restore` Farm/Zone trên SQL Server (`/api/v1/farms`, `/zones`), adapter `/api/v1/context?farm_id={id}` | Archive bị chặn (`409 AREA_IN_USE`) nếu còn thiết bị bật quyền; tắt quyền thuộc FL-04 (G4) |
+| FL-03 — Hồ sơ & Khóa | Tạo/list/detail/PATCH Node/Gateway (chọn `farm_id`/`zone_id` từ DB); cấp/xem/thu hồi Gateway Credential (tối đa 2 active); `GET /api/v1/metrics` | Không ghép/chuyển/xóa thiết bị hoặc bật/tắt quyền; rotation E2E với ingestion thuộc G2 |
+| M1/M2 và PR-A — CSDL | 15 bảng nghiệp vụ; PR-A (`fee0fa015af7`) thêm `archived_at`/`row_ver` cho Farm/Zone | Chưa có M3 (episode/audit), ingestion hay worker |
 
 Node mới chưa gắn Gateway vẫn là hồ sơ hợp lệ, hiển thị **Chưa liên kết Gateway**.
 Tạo hồ sơ không đợi phần cứng và không chứng minh thiết bị online. Chưa có bản đo
 thì mốc cuối lưu là null; không tự tạo số đo, ngưỡng hoặc period giả.
 
-Source hiện tại chưa có M3, cấp credential thiết bị, ingestion/ACK2, API xem số đo,
-cấu hình giám sát, worker cảnh báo, dashboard hoặc báo cáo nghiệp vụ. Trạng thái
+Source hiện tại chưa có M3, bật/tắt quyền nhận (FL-04), ingestion/ACK2 (FL-06),
+API xem số đo, cấu hình giám sát, worker cảnh báo, dashboard hoặc báo cáo nghiệp vụ. Trạng thái
 source trong checkout này không chứng minh tính năng đã merge, đã áp lên mọi DB
 hoặc đã nghiệm thu đầy đủ AC/NFR.
 
@@ -217,8 +217,8 @@ hai kết nối đồng thời, snapshot/pool và logout/write race. Không di�
 | Nội dung cần đối chiếu | Source | Kiểm chứng hiện có |
 | --- | --- | --- |
 | Auth/session/CSRF | [Backend auth](backend/app/modules/auth), [FE auth](frontend/src/features/auth) | [API/auth tests](backend/tests/test_auth.py), [session FE tests](frontend/tests/auth-session.test.mjs) |
-| Context và hồ sơ thiết bị | [Devices API](backend/app/modules/devices), [Devices FE](frontend/src/features/devices) | [Devices tests](backend/tests/test_devices.py); có mock transaction, chưa thay SQL thật |
-| M1/M2 và IDENTITY/FK | [Migrations](backend/migrations/versions), [hướng dẫn CSDL](database/README.md) | [DDL offline](backend/tests/test_m2_migration.py), [SQL auth/M2 opt-in](backend/tests/test_sql_auth_m2.py) |
+| Khu vực, hồ sơ & khóa | [Backend areas](backend/app/modules/areas), [Backend devices](backend/app/modules/devices), [FE areas/devices](frontend/src/features) | [Areas/Devices/Credentials/Metrics tests](backend/tests), [SQL G1 opt-in](backend/tests/test_sql_g1.py), [G1 FE tests](frontend/tests/g1-admin.test.mjs) |
+| M1/M2/PR-A và CSDL | [Migrations](backend/migrations/versions), [hướng dẫn CSDL](database/README.md) | [DDL offline](backend/tests/test_m2_migration.py), [PR-A tests](backend/tests/test_farm_zone_lifecycle_migration.py), [SQL opt-in](backend/tests/test_sql_auth_m2.py) |
 | Request cũ/401/lỗi mạng | [FE client](frontend/src/api/client.ts) | [Client tests](frontend/tests/api-client.test.mjs) |
 
 Các thiết kế Confluence bên dưới là nguồn nghiệp vụ; README mô tả phạm vi code

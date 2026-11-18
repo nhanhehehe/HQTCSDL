@@ -94,14 +94,30 @@ function Devices({ csrf }: { csrf: string }) {
     }
   }, [])
 
+  async function fetchAllActivePages<T>(basePath: string, signal?: AbortSignal): Promise<T[]> {
+    const all: T[] = []
+    let nextCursor: string | null = null
+    do {
+      const params = new URLSearchParams({ status: 'ACTIVE', page_size: '100' })
+      if (nextCursor) params.set('cursor', nextCursor)
+      const page = await requestJson<{ items: T[]; next_cursor: string | null }>(
+        `${basePath}?${params}`,
+        { signal },
+      )
+      all.push(...page.items)
+      nextCursor = page.next_cursor
+    } while (nextCursor !== null && !signal?.aborted)
+    return all
+  }
+
   async function refreshAreasAndMetrics(signal?: AbortSignal) {
     try {
-      const [farmPage, metricsRes] = await Promise.all([
-        requestJson<{ items: FarmView[] }>('/api/v1/farms?status=ACTIVE&page_size=100', { signal }),
+      const [allFarms, metricsRes] = await Promise.all([
+        fetchAllActivePages<FarmView>('/api/v1/farms', signal),
         requestJson<{ items: MetricDef[] }>('/api/v1/metrics', { signal }),
       ])
       if (!mounted.current || signal?.aborted) return
-      setFarms(farmPage.items)
+      setFarms(allFarms)
       setMetricsCatalog(metricsRes.items)
     } catch {
       if (!signal?.aborted && mounted.current) {
@@ -123,12 +139,10 @@ function Devices({ csrf }: { csrf: string }) {
     setZone('')
     if (!nextFarmId) return
     const activeZoneGen = zoneGen.current
-    void requestJson<{ items: ZoneView[] }>(
-      `/api/v1/farms/${nextFarmId}/zones?status=ACTIVE&page_size=100`,
-    )
-      .then(page => {
+    void fetchAllActivePages<ZoneView>(`/api/v1/farms/${nextFarmId}/zones`)
+      .then(allZones => {
         if (!mounted.current || activeZoneGen !== zoneGen.current) return
-        setZones(page.items)
+        setZones(allZones)
       })
       .catch(() => {
         if (mounted.current && activeZoneGen === zoneGen.current) {
