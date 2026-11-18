@@ -328,39 +328,39 @@ Cài uv theo [tài liệu chính thức](https://docs.astral.sh/uv/getting-start
 `uv sync --locked` và `npm ci` là lệnh cài chuẩn. Nâng dependency trong PR riêng, chạy
 lại kiểm tra tương ứng; không thay lockfile chỉ để giải quyết conflict bằng cách xóa.
 
-## FL-02/FL-03 — khu vực và hồ sơ thiết bị
+## FL-02/FL-03 — khu vực, hồ sơ thiết bị và khóa Gateway
 
-Backend cần `HQ_AREA_MANIFEST` là chuỗi JSON như trong `backend/.env.example`.
-Thay mã mẫu bằng mã Farm/Zone thực tế đã được triển khai. Thiếu/sai manifest vẫn
-cho phép đăng nhập; `/api/v1/context` trả `200 INVALID` và issues. Tên/mô tả lấy
-trong DB. Không tự chạy seed, migration hoặc tạo tài khoản khi khởi động.
+Farm/Zone được quản lý trực tiếp trong SQL Server (`/api/v1/farms`,
+`/api/v1/zones`); `HQ_AREA_MANIFEST` đã được loại bỏ. DB trống Farm vẫn cho
+phép đăng nhập để tạo Farm mới. `GET /api/v1/context?farm_id={id}` chỉ là
+adapter tương thích chỉ đọc (`0` Farm active → `INVALID/AREA_NOT_CONFIGURED`,
+`1` Farm active → `VALID`, `>1` Farm active thiếu `farm_id` → `409
+AREA_SELECTION_REQUIRED`). Không tự chạy seed, migration hoặc tạo tài khoản khi khởi động.
 
 Cấu hình `HQ_CURSOR_SECRET` bằng một secret ngẫu nhiên riêng, bền qua restart,
-khác CSRF secret. Đổi `HQ_DATASET_GENERATION` sau restore/reset dataset. Profile
-lists dùng keyset theo internal ID tăng dần, mặc định 50/tối đa 200; cursor ràng
-buộc route/filter/page size/order/generation. Mỗi trang là snapshot riêng.
-Không hứa danh sách bất biến xuyên các lần tải trang. Thiếu cursor secret chỉ
-được phát hiện khi cần phát hành/xác minh cursor; cấu hình trước khi vận hành.
+khác CSRF secret. Đổi `HQ_DATASET_GENERATION` sau restore/reset dataset. Danh sách
+Farm/Zone phân trang mặc định 20/tối đa 100; hồ sơ thiết bị và credential mặc định
+50/tối đa 200; cursor ràng buộc route/filter/page size/order/generation. Mỗi trang
+là snapshot riêng. Thiếu cursor secret chỉ được phát hiện khi cần phát hành/xác
+minh cursor; cấu hình trước khi vận hành.
 
-Sau đăng nhập: tải danh sách Node/Gateway, chọn để xem/sửa tên/ghi chú hoặc tạo
-hồ sơ mới. Node mới có Gateway NULL, không phải bằng chứng offline. Không có
-web API ghép/chuyển/xóa/toggle. Mất phản hồi giữ biểu mẫu; dùng kiểm tra lại hồ
-sơ để đối chiếu, rồi chọn bản mới trước khi ghi tiếp. Không tự ghi đè version.
-Gateway DTO có `farm:{id,code,name}` và `nodes:[{id,device_id,name}]`.
+Sau đăng nhập: quản lý Farm/Zone (tạo, sửa tên/mô tả, `archive`/`restore` theo
+thứ tự lá trước — `409 AREA_IN_USE` nếu còn thiết bị bật quyền nhận); tạo
+Gateway chọn `farm_id` tường minh, tạo Node chọn `zone_id` thuộc Farm active,
+cấp/thu hồi khóa Gateway (`/api/v1/gateways/{id}/credentials`, tối đa 2 khóa
+active, secret `hqgw_v1_...` chỉ hiển thị 1 lần sau commit) và xem danh mục
+chỉ đọc `GET /api/v1/metrics`. Node mới có Gateway NULL, không phải bằng chứng
+offline. Không có web API ghép/chuyển/xóa hoặc bật/tắt quyền nhận (FL-04 thuộc G4).
+Mất phản hồi giữ biểu mẫu; dùng kiểm tra lại để đối chiếu, không tự ghi đè version
+hay tự cấp tiếp khóa.
 
-GET context/profile chạy SNAPSHOT; SQL Server phải bật ALLOW_SNAPSHOT_ISOLATION.
-Node+NodeRuntime+EvaluationState tạo trong một transaction; không cần sửa M1/M2.
-Các API trả no-store. Không cần phần cứng để đăng ký hồ sơ.
+GET area/context/profile/credential/metrics chạy SNAPSHOT; SQL Server phải bật
+ALLOW_SNAPSHOT_ISOLATION. Node+NodeRuntime+EvaluationState tạo trong một transaction;
+thứ tự khóa ghi chuẩn `Session → Farm → Zone → Gateway → Node`. Các API trả `no-store`.
+Không cần phần cứng để đăng ký hồ sơ hay cấp khóa.
 
-Kiểm tra offline mới: từ backend chạy `python -m pytest tests/test_devices.py`;
-chạy tiếp các lệnh Ruff/pytest và frontend typecheck/build/client tests đã nêu.
-SQL Server thật (rollback lỗi state, hai POST/PATCH, snapshot, logout/write race)
-và browser (reload, conflict, mất response) cần môi trường test được chọn và
-bằng chứng riêng; không coi unit mocks hoặc build là nghiệm thu các ca này.
-
-Verification for this implementation: 71 backend tests passed, 2 SQL opt-in tests
-skipped (`HQ_RUN_SQL_TESTS=0`); Ruff check/format and Alembic source heads passed.
-Frontend typecheck/build and 4 API-client tests passed. Backend tests ran with
-plugin autoload disabled outside the Windows sandbox after TestClient stalled
-inside it. Starlette emits its existing httpx deprecation warning. Real SQL and
-browser acceptance listed above has not been run; no DB writes were performed.
+Kiểm tra offline G1: từ `backend/` chạy `pytest tests/test_areas.py tests/test_devices.py tests/test_gateway_credentials.py tests/test_metrics.py`;
+kiểm tra SQL Server thật (opt-in trên DB test disposable đã lên `fee0fa015af7`):
+`$env:HQ_RUN_SQL_TESTS='1'; $env:HQ_EXPECT_TEST_DATABASE='HQTCSDL_test_ten'; pytest tests/test_sql_g1.py -v`.
+Ghi chú: ingestion thực tế bằng `X-API-Key` (`DEFERRED_G2`) và bật/tắt quyền nhận
+(`DEFERRED_FL04`) chưa thuộc phạm vi G1.

@@ -81,18 +81,12 @@ Chỉ bổ sung biến còn thiếu trong `.env` hiện có; xem
 
 | Biến | Cách dùng |
 | --- | --- |
-| `HQ_AREA_MANIFEST` | Chuỗi JSON chọn Farm và hai Zone indoor/outdoor bằng mã chính xác; mã phải tồn tại trong DB runtime |
 | `HQ_CURSOR_SECRET` | Secret ngẫu nhiên riêng để ký cursor, khác CSRF secret, giữ ổn định qua restart |
 | `HQ_DATASET_GENERATION` | Nhãn dataset, mặc định `1`; đổi sau restore/reset để vô hiệu cursor cũ, không đổi mỗi lần sửa hồ sơ |
 
-Manifest mẫu với seed mặc định:
-
-```dotenv
-HQ_AREA_MANIFEST='{"farm_code":"FARM-01","zone_codes":{"indoor":"INDOOR","outdoor":"OUTDOOR"}}'
-```
-
-Manifest chỉ chọn khu vực, không ghi đè tên/mô tả trong DB. Thiếu/sai manifest
-vẫn cho phép đăng nhập nhưng context trả `200 INVALID`; lỗi truy cập SQL trả 503.
+Nguồn Farm/Zone được quản lý trực tiếp trong SQL Server qua API/UI quản trị
+(`/api/v1/farms`, `/api/v1/zones`), không còn dùng `HQ_AREA_MANIFEST`. Database
+trống Farm vẫn cho phép đăng nhập và tạo Farm mới qua giao diện.
 Cấu hình cursor secret trước khi test phân trang; không đưa secret vào FE/log/Git.
 
 ### Chạy Backend và Frontend

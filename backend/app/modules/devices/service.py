@@ -1,92 +1,31 @@
-import base64
-import hmac
-import json
-from contextlib import contextmanager
-
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
 
-from app.core.errors import WebError
-from app.modules.auth import repository as auth_repo
-from app.modules.auth.security import token_hash, valid_csrf
-from app.modules.auth.service import invalid_session, storage_error
+from app.core.web import fail, sign_cursor, verify_cursor, web_transaction
+from app.modules.areas import repository as areas_repo
+from app.modules.auth.service import storage_error
 from app.modules.devices import repository as repo
-from app.modules.devices.context import parse_manifest, read_context
-from app.modules.devices.schemas import version
-
-
-def fail(status, code):
-    raise WebError(status, code, code)
+from app.modules.devices.context import read_context
+from app.modules.devices.credentials import generate_gateway_key
+from app.modules.devices.schemas import identity, version
 
 
 class DeviceService:
     def __init__(self, database, settings):
         self.database = database
         self.settings = settings
-        self.manifest = parse_manifest(settings.area_manifest)
-
-    @contextmanager
-    def transaction(self, cookie, csrf=None, write=False):
-        digest = token_hash(cookie)
-        if digest is None:
-            raise invalid_session()
-        if self.database.engine is None:
-            raise storage_error()
-        try:
-            with (
-                self.database.engine.connect().execution_options(
-                    isolation_level="READ COMMITTED" if write else "SNAPSHOT"
-                ) as connection,
-                connection.begin(),
-                Session(bind=connection) as session,
-            ):
-                if write:
-                    session.execute(text("SET XACT_ABORT ON"))
-                if auth_repo.session_guard(session, digest, lock=write) is None:
-                    raise invalid_session()
-                if write and (
-                    self.settings.csrf_secret is None
-                    or not valid_csrf(self.settings.csrf_secret.get_secret_value(), digest, csrf)
-                ):
-                    fail(403, "CSRF_INVALID")
-                yield session
-        except SQLAlchemyError:
-            raise storage_error() from None
 
     def cursor(self, payload=None, token=None):
-        secret = self.settings.cursor_secret
-        if secret is None or not secret.get_secret_value():
-            raise storage_error()
-        key = secret.get_secret_value().encode()
-
-        def encode(raw):
-            return base64.urlsafe_b64encode(raw).decode().rstrip("=")
-
         if token is None:
-            body = encode(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode())
-            prefix = "v1." + body
-            return prefix + "." + encode(hmac.digest(key, prefix.encode(), "sha256"))
-        try:
-            if len(token) > 4096:
-                raise ValueError()
-            v, body, signature = token.split(".")
-            expected = encode(hmac.digest(key, (v + "." + body).encode(), "sha256"))
-            if v != "v1" or not hmac.compare_digest(signature, expected):
-                raise ValueError()
-            raw = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))
-            if encode(raw) != body:
-                raise ValueError()
-            return json.loads(raw)
-        except (ValueError, TypeError, UnicodeError):
-            fail(400, "CURSOR_INVALID")
+            return sign_cursor(self.settings, payload)
+        return verify_cursor(self.settings, token)
 
-    def context(self, cookie):
-        with self.transaction(cookie) as session:
-            return read_context(session, self.manifest)
+    def context(self, cookie, *, farm_id: str | None = None):
+        with web_transaction(self.database, self.settings, cookie) as session:
+            return read_context(session, farm_id=farm_id)
 
     def detail(self, cookie, kind, row_id):
-        with self.transaction(cookie) as session:
+        with web_transaction(self.database, self.settings, cookie) as session:
             result = repo.profile(session, kind, row_id)
             if result is None:
                 fail(404, "NOT_FOUND")
@@ -104,11 +43,7 @@ class DeviceService:
         boundary = 0
         if cursor is not None:
             decoded = self.cursor(token=cursor)
-            if not isinstance(decoded, dict):
-                fail(400, "CURSOR_INVALID")
             boundary_raw = decoded.pop("boundary", None)
-            from app.modules.devices.schemas import identity
-
             try:
                 boundary = int(identity(boundary_raw))
             except (ValueError, TypeError):
@@ -116,7 +51,7 @@ class DeviceService:
             if decoded != binding:
                 fail(400, "CURSOR_INVALID")
         table, pk, business = repo.TABLES[kind]
-        with self.transaction(cookie) as session:
+        with web_transaction(self.database, self.settings, cookie) as session:
             rows = (
                 session.execute(
                     text(
@@ -145,18 +80,29 @@ class DeviceService:
     def create(self, cookie, csrf, kind, body):
         table, pk, business = repo.TABLES[kind]
         try:
-            with self.transaction(cookie, csrf, write=True) as session:
-                context = read_context(session, self.manifest, lock=True)
+            with web_transaction(
+                cookie=cookie, database=self.database, settings=self.settings, csrf=csrf, write=True
+            ) as session:
                 if kind == "nodes":
-                    target = next((z for z in context["zones"] if z["id"] == body.zone_id), None)
-                    parent_column, parent = "zone_id", body.zone_id
+                    farm_id = areas_repo.get_zone_farm_id(session, body.zone_id)
+                    if farm_id is None:
+                        fail(404, "NOT_FOUND")
+                    farm = areas_repo.get_farm(session, str(farm_id), lock=True)
+                    zone = areas_repo.get_zone(session, body.zone_id, lock=True)
+                    if farm is None or zone is None or int(zone["farm_id"]) != int(farm_id):
+                        fail(404, "NOT_FOUND")
+                    if farm["archived_at"] is not None or zone["archived_at"] is not None:
+                        fail(409, "AREA_ARCHIVED", "Không thể tạo Node trong khu vực đã lưu trữ")
+                    parent_column, parent = "zone_id", int(body.zone_id)
                     business_code = body.device_id
                 else:
-                    target = context["farm"]
-                    parent_column, parent = "farm_id", target["id"] if target else None
+                    farm = areas_repo.get_farm(session, body.farm_id, lock=True)
+                    if farm is None:
+                        fail(404, "NOT_FOUND")
+                    if farm["archived_at"] is not None:
+                        fail(409, "AREA_ARCHIVED", "Không thể tạo Gateway trong Farm đã lưu trữ")
+                    parent_column, parent = "farm_id", int(body.farm_id)
                     business_code = body.gateway_id
-                if target is None:
-                    fail(400, "CONFIGURATION_INVALID")
                 try:
                     row_id = session.execute(
                         text(
@@ -198,47 +144,147 @@ class DeviceService:
 
     def patch(self, cookie, csrf, kind, row_id, body):
         table, pk, _ = repo.TABLES[kind]
-        with self.transaction(cookie, csrf, write=True) as session:
-            if kind == "nodes":
-                gateway_id = session.execute(
-                    text("SELECT gateway_id FROM dbo.Node WHERE node_id=:id"), {"id": row_id}
-                ).scalar()
-                if gateway_id is not None:
-                    session.execute(
+        expected = version(body.expected_row_version)
+        try:
+            with web_transaction(self.database, self.settings, cookie, csrf, write=True) as session:
+                # Canonical lock order: Session -> Farm -> Zone -> Gateway -> Node.
+                if kind == "nodes":
+                    parents = repo.resolve_node_parents(session, row_id)
+                    if parents is None:
+                        fail(404, "NOT_FOUND")
+                    areas_repo.get_farm(session, str(parents["farm_id"]), lock=True)
+                    areas_repo.get_zone(session, str(parents["zone_id"]), lock=True)
+                    if parents["gateway_id"] is not None:
+                        repo.lock_gateway(session, parents["gateway_id"])
+                    row = repo.lock_node(session, row_id)
+                else:
+                    farm_id = repo.resolve_gateway_farm_id(session, row_id)
+                    if farm_id is None:
+                        fail(404, "NOT_FOUND")
+                    areas_repo.get_farm(session, str(farm_id), lock=True)
+                    row = repo.lock_gateway(session, row_id)
+                if row is None:
+                    fail(404, "NOT_FOUND")
+                if bytes(row["row_ver"]) != expected:
+                    fail(409, "VERSION_CONFLICT")
+                changes = {
+                    field: getattr(body, field)
+                    for field in ("name", "notes")
+                    if field in body.model_fields_set and getattr(body, field) != row[field]
+                }
+                if changes:
+                    assignments = ",".join(f"{field}=:{field}" for field in changes)
+                    updated = session.execute(
                         text(
-                            "SELECT gateway_id FROM dbo.Gateway WITH (UPDLOCK,HOLDLOCK) "
-                            "WHERE gateway_id=:id"
+                            f"UPDATE dbo.{table} SET {assignments} "
+                            f"OUTPUT inserted.{pk} WHERE {pk}=:id AND row_ver=:version"
                         ),
-                        {"id": gateway_id},
-                    ).all()
-            row = (
-                session.execute(
-                    text(f"SELECT * FROM dbo.{table} WITH (UPDLOCK,HOLDLOCK) WHERE {pk}=:id"),
-                    {"id": row_id},
-                )
-                .mappings()
-                .first()
+                        {**changes, "id": int(row_id), "version": expected},
+                    ).scalar()
+                    if updated is None:
+                        fail(409, "VERSION_CONFLICT")
+                result = repo.profile(session, kind, row_id)
+            return result
+        except SQLAlchemyError:
+            raise storage_error() from None
+
+    def list_credentials(
+        self, cookie: str | None, *, gateway_id: str, page_size: int, cursor: str | None
+    ) -> dict:
+        binding = {
+            "purpose": "credential-cursor",
+            "route": "gateway-credentials",
+            "gateway_id": gateway_id,
+            "page_size": page_size,
+            "order": "id-desc",
+            "generation": self.settings.dataset_generation,
+        }
+        boundary: int | None = None
+        if cursor is not None:
+            decoded = self.cursor(token=cursor)
+            boundary_raw = decoded.pop("boundary", None)
+            try:
+                boundary = int(identity(boundary_raw))
+            except (ValueError, TypeError):
+                fail(400, "CURSOR_INVALID")
+            if decoded != binding:
+                fail(400, "CURSOR_INVALID")
+        with web_transaction(self.database, self.settings, cookie) as session:
+            if repo.resolve_gateway_farm_id(session, gateway_id) is None:
+                fail(404, "NOT_FOUND")
+            rows = repo.list_credentials(
+                session, gateway_id=gateway_id, boundary=boundary, limit=page_size + 1
             )
+            items = [repo.credential_view(r) for r in rows[:page_size]]
+            next_cursor = (
+                self.cursor({**binding, "boundary": str(rows[page_size - 1]["credential_id"])})
+                if len(rows) > page_size
+                else None
+            )
+            return {"items": items, "next_cursor": next_cursor}
+
+    def get_credential(self, cookie: str | None, *, gateway_id: str, credential_id: str) -> dict:
+        with web_transaction(self.database, self.settings, cookie) as session:
+            row = repo.get_credential(session, gateway_id=gateway_id, credential_id=credential_id)
             if row is None:
                 fail(404, "NOT_FOUND")
-            expected = version(body.expected_row_version)
-            if bytes(row["row_ver"]) != expected:
-                fail(409, "VERSION_CONFLICT")
-            changes = {
-                field: getattr(body, field)
-                for field in ("name", "notes")
-                if field in body.model_fields_set and getattr(body, field) != row[field]
-            }
-            if changes:
-                assignments = ",".join(f"{field}=:{field}" for field in changes)
-                updated = session.execute(
-                    text(
-                        f"UPDATE dbo.{table} SET {assignments} "
-                        f"OUTPUT inserted.{pk} WHERE {pk}=:id AND row_ver=:version"
-                    ),
-                    {**changes, "id": row_id, "version": expected},
-                ).scalar()
-                if updated is None:
-                    fail(409, "VERSION_CONFLICT")
-            result = repo.profile(session, kind, row_id)
-        return result
+            return repo.credential_view(row)
+
+    def issue_credential(self, cookie: str | None, csrf: str | None, *, gateway_id: str) -> dict:
+        try:
+            with web_transaction(self.database, self.settings, cookie, csrf, write=True) as session:
+                farm_id = repo.resolve_gateway_farm_id(session, gateway_id)
+                if farm_id is None:
+                    fail(404, "NOT_FOUND")
+                farm = areas_repo.get_farm(session, str(farm_id), lock=True)
+                gw = repo.lock_gateway(session, gateway_id)
+                if farm is None or gw is None:
+                    fail(404, "NOT_FOUND")
+                if farm["archived_at"] is not None:
+                    fail(
+                        409, "AREA_ARCHIVED", "Không thể cấp khóa cho Gateway thuộc Farm đã lưu trữ"
+                    )
+                active_count = repo.count_active_credentials(session, gateway_id)
+                if active_count >= 2:
+                    fail(
+                        409,
+                        "CREDENTIAL_LIMIT_REACHED",
+                        "Gateway đã đạt tối đa 2 khóa đang hoạt động",
+                    )
+                api_key, digest = generate_gateway_key()
+                row = repo.insert_credential(session, gateway_id=gateway_id, key_hash=digest)
+                credential = repo.credential_view(row)
+            return {"credential": credential, "api_key": api_key}
+        except SQLAlchemyError:
+            raise storage_error() from None
+
+    def revoke_credential(
+        self, cookie: str | None, csrf: str | None, *, gateway_id: str, credential_id: str
+    ) -> dict:
+        try:
+            with web_transaction(self.database, self.settings, cookie, csrf, write=True) as session:
+                farm_id = repo.resolve_gateway_farm_id(session, gateway_id)
+                if farm_id is None:
+                    fail(404, "NOT_FOUND")
+                areas_repo.get_farm(session, str(farm_id), lock=True)
+                gw = repo.lock_gateway(session, gateway_id)
+                if gw is None:
+                    fail(404, "NOT_FOUND")
+                row = repo.get_credential(
+                    session, gateway_id=gateway_id, credential_id=credential_id, lock=True
+                )
+                if row is None:
+                    fail(404, "NOT_FOUND")
+                if row["revoked_at"] is None:
+                    updated = repo.revoke_credential(
+                        session, gateway_id=gateway_id, credential_id=credential_id
+                    )
+                    if updated is not None:
+                        row = updated
+                return repo.credential_view(row)
+        except SQLAlchemyError:
+            raise storage_error() from None
+
+    def list_metrics(self, cookie: str | None) -> dict:
+        with web_transaction(self.database, self.settings, cookie) as session:
+            return {"items": repo.list_metrics(session)}
