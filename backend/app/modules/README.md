@@ -3,13 +3,12 @@
 Theo 03.3: `auth`, `devices`, `ingestion`, `measurements`, `monitoring_config`,
 `alerts`, `reports`. Chỉ tạo code module khi nhận task/thiết kế luồng đã review.
 
-Hiện có `auth` (FL-01) và `devices` (FL-02/FL-03). Các module còn lại trong danh
+Hiện có `auth` (FL-01), `areas` (FL-02) và `devices` (FL-03 + `/context` adapter + `metrics` read-only). Các module còn lại trong danh
 sách là ranh giới thiết kế dự kiến, chưa phải tính năng đã triển khai.
 
 - `auth`: tạo Admin bằng CLI riêng, login/session/logout và session/CSRF guard.
-- `devices`: context Farm/Zone read-only và tạo/list/detail/sửa tên, ghi chú của
-  Node/Gateway. Dùng lại auth guard trong transaction ghi; không xác thực ở một
-  transaction rồi coi mutation ở transaction khác đã được bảo vệ.
+- `areas`: CRUD và vòng đời `archive`/`restore` Farm/Zone theo DB (thay thế `HQ_AREA_MANIFEST`).
+- `devices`: adapter `/context`, tạo/list/detail/sửa tên, ghi chú Node/Gateway (chọn `farm_id`/`zone_id` từ DB), quản lý Gateway Credential (`/gateways/{id}/credentials*`) và `GET /api/v1/metrics` chỉ đọc. Dùng lại auth guard trong transaction ghi theo thứ tự khóa `Session -> Farm -> Zone -> Gateway -> Node`.
 - Node mới có Gateway NULL vẫn hợp lệ; tạo cùng runtime/state rỗng, không tạo
   config/period/measurement. Không có web API pairing, chuyển/xóa hoặc toggle quyền.
 
