@@ -21,7 +21,7 @@ Code cũ đã lưu tại `archive/legacy-before-foundation`; khung này bắt đ
 | FL-01 — Auth | Admin CLI, login/session/logout, cookie/CSRF và FE xác thực | Không có tài khoản mặc định, đăng ký web hoặc reset mật khẩu |
 | FL-02 — Khu vực | Đọc Farm/Zone theo manifest; trạng thái VALID/INVALID và issues | Không CRUD Farm/Zone; thiếu một Zone không chặn target khác còn hợp lệ |
 | FL-03 — Hồ sơ | Tạo/list/detail và sửa tên/ghi chú Node/Gateway; exact-code lookup, cursor, rowversion | Không ghép/chuyển/xóa thiết bị hoặc bật/tắt quyền qua web |
-| M1/M2 — CSDL | 15 bảng nghiệp vụ và revision Alembic | Có schema đo/config/runtime chưa có nghĩa ingestion, cấu hình giám sát hay worker đã chạy |
+| M1/M2 và PR-A — CSDL | 15 bảng nghiệp vụ; PR-A thêm archived_at/row_ver cho Farm/Zone | Chưa có CRUD/archive/restore khu vực; schema không chứng minh ingestion hay worker đã chạy |
 
 Node mới chưa gắn Gateway vẫn là hồ sơ hợp lệ, hiển thị **Chưa liên kết Gateway**.
 Tạo hồ sơ không đợi phần cứng và không chứng minh thiết bị online. Chưa có bản đo
@@ -59,6 +59,8 @@ cấu hình SQL; readiness sẽ 503.
    Mỗi DB đích cần được migration riêng; đổi nhãn `HQ_ENV` không tự đổi DB.
 4. [Áp và kiểm M2 trên DB test](database/README.md#m2--schema-đo-cấu-hình-và-runtime)
    để chạy đầy đủ hồ sơ thiết bị. Auth chỉ cần M1; FL-03 cần cả M2.
+   [PR-A sau M2](database/README.md#pr-a--cột-vòng-đời-farmzone) chuẩn bị schema
+   vòng đời Farm/Zone; xem điều kiện an toàn trước khi nâng cấp tới head.
 5. Tạo Admin riêng trên DB dự định dùng nếu chưa có; đối chiếu cấu hình khu vực
    bên dưới rồi restart Backend. Không tự chạy lại seed nếu dữ liệu nền đã đủ.
 
