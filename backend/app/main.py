@@ -19,6 +19,8 @@ from app.core.errors import (
     validation_error,
     web_error,
 )
+from app.modules.areas.router import router as areas_router
+from app.modules.areas.service import AreaService
 from app.modules.auth.router import router as auth_router
 from app.modules.auth.service import AuthService
 from app.modules.devices.router import router as devices_router
@@ -41,6 +43,7 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
     app.state.database = database
     app.state.settings = settings
     app.state.auth = AuthService(database, settings)
+    app.state.areas = AreaService(database, settings)
     app.state.devices = DeviceService(database, settings)
     app.add_exception_handler(WebError, web_error)
     app.add_exception_handler(StarletteHTTPException, http_error)
@@ -95,6 +98,7 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
         }
 
     app.include_router(auth_router)
+    app.include_router(areas_router)
     app.include_router(devices_router)
 
     @app.api_route(
