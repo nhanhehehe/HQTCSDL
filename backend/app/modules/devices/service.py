@@ -6,6 +6,7 @@ from app.modules.areas import repository as areas_repo
 from app.modules.auth.service import storage_error
 from app.modules.devices import repository as repo
 from app.modules.devices.context import read_context
+from app.modules.devices.credentials import generate_gateway_key
 from app.modules.devices.schemas import identity, version
 
 
@@ -186,3 +187,104 @@ class DeviceService:
             return result
         except SQLAlchemyError:
             raise storage_error() from None
+
+    def list_credentials(
+        self, cookie: str | None, *, gateway_id: str, page_size: int, cursor: str | None
+    ) -> dict:
+        binding = {
+            "purpose": "credential-cursor",
+            "route": "gateway-credentials",
+            "gateway_id": gateway_id,
+            "page_size": page_size,
+            "order": "id-desc",
+            "generation": self.settings.dataset_generation,
+        }
+        boundary: int | None = None
+        if cursor is not None:
+            decoded = self.cursor(token=cursor)
+            boundary_raw = decoded.pop("boundary", None)
+            try:
+                boundary = int(identity(boundary_raw))
+            except (ValueError, TypeError):
+                fail(400, "CURSOR_INVALID")
+            if decoded != binding:
+                fail(400, "CURSOR_INVALID")
+        with web_transaction(self.database, self.settings, cookie) as session:
+            if repo.resolve_gateway_farm_id(session, gateway_id) is None:
+                fail(404, "NOT_FOUND")
+            rows = repo.list_credentials(
+                session, gateway_id=gateway_id, boundary=boundary, limit=page_size + 1
+            )
+            items = [repo.credential_view(r) for r in rows[:page_size]]
+            next_cursor = (
+                self.cursor({**binding, "boundary": str(rows[page_size - 1]["credential_id"])})
+                if len(rows) > page_size
+                else None
+            )
+            return {"items": items, "next_cursor": next_cursor}
+
+    def get_credential(self, cookie: str | None, *, gateway_id: str, credential_id: str) -> dict:
+        with web_transaction(self.database, self.settings, cookie) as session:
+            row = repo.get_credential(session, gateway_id=gateway_id, credential_id=credential_id)
+            if row is None:
+                fail(404, "NOT_FOUND")
+            return repo.credential_view(row)
+
+    def issue_credential(self, cookie: str | None, csrf: str | None, *, gateway_id: str) -> dict:
+        try:
+            with web_transaction(self.database, self.settings, cookie, csrf, write=True) as session:
+                farm_id = repo.resolve_gateway_farm_id(session, gateway_id)
+                if farm_id is None:
+                    fail(404, "NOT_FOUND")
+                farm = areas_repo.get_farm(session, str(farm_id), lock=True)
+                gw = repo.lock_gateway(session, gateway_id)
+                if farm is None or gw is None:
+                    fail(404, "NOT_FOUND")
+                if farm["archived_at"] is not None:
+                    fail(
+                        409, "AREA_ARCHIVED", "Không thể cấp khóa cho Gateway thuộc Farm đã lưu trữ"
+                    )
+                active_count = repo.count_active_credentials(session, gateway_id)
+                if active_count >= 2:
+                    fail(
+                        409,
+                        "CREDENTIAL_LIMIT_REACHED",
+                        "Gateway đã đạt tối đa 2 khóa đang hoạt động",
+                    )
+                api_key, digest = generate_gateway_key()
+                row = repo.insert_credential(session, gateway_id=gateway_id, key_hash=digest)
+                credential = repo.credential_view(row)
+            return {"credential": credential, "api_key": api_key}
+        except SQLAlchemyError:
+            raise storage_error() from None
+
+    def revoke_credential(
+        self, cookie: str | None, csrf: str | None, *, gateway_id: str, credential_id: str
+    ) -> dict:
+        try:
+            with web_transaction(self.database, self.settings, cookie, csrf, write=True) as session:
+                farm_id = repo.resolve_gateway_farm_id(session, gateway_id)
+                if farm_id is None:
+                    fail(404, "NOT_FOUND")
+                areas_repo.get_farm(session, str(farm_id), lock=True)
+                gw = repo.lock_gateway(session, gateway_id)
+                if gw is None:
+                    fail(404, "NOT_FOUND")
+                row = repo.get_credential(
+                    session, gateway_id=gateway_id, credential_id=credential_id, lock=True
+                )
+                if row is None:
+                    fail(404, "NOT_FOUND")
+                if row["revoked_at"] is None:
+                    updated = repo.revoke_credential(
+                        session, gateway_id=gateway_id, credential_id=credential_id
+                    )
+                    if updated is not None:
+                        row = updated
+                return repo.credential_view(row)
+        except SQLAlchemyError:
+            raise storage_error() from None
+
+    def list_metrics(self, cookie: str | None) -> dict:
+        with web_transaction(self.database, self.settings, cookie) as session:
+            return {"items": repo.list_metrics(session)}

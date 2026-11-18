@@ -88,3 +88,7 @@ class ProfilePatch(WebModel):
     def valid_version(cls, value: str) -> str:
         version(value)
         return value
+
+
+class EmptyBody(WebModel):
+    pass
