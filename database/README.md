@@ -17,8 +17,8 @@ M1 `a70b8056608d_create_m1_foundation_tables.py` đã merge qua
 | Danh mục | MetricDefinition |
 
 `alembic_version` là bảng theo dõi revision, không phải bảng nghiệp vụ thứ chín.
-DB mới sau M1 có tổng 9 bảng. Source hiện có head `b15e2c03a001` (M2);
-đọc phần M2 bên dưới trước khi chạy `upgrade head`. DB đã áp riêng M1 vẫn có
+DB mới sau M1 có tổng 9 bảng. Source hiện có head `fee0fa015af7` (PR-A), sau M2
+`b15e2c03a001`; đọc phần M2 và PR-A bên dưới trước khi chạy `upgrade head`. DB đã áp riêng M1 vẫn có
 current `a70b8056608d`, không có nghĩa M2 đã được áp.
 
 M2 có trong source; M3 (4 bảng cảnh báo/audit) chưa triển khai. FL-03 đã có API tạo
@@ -134,7 +134,7 @@ uv run alembic current
 
 Sau downgrade, `current` không có revision; chỉ còn bảng `alembic_version` (không
 có dòng version). Nếu chỉ kiểm M1, tạo lại bằng `uv run alembic upgrade a70b8056608d`,
-kiểm current và chạy seed nếu thiếu dữ liệu nền. `upgrade head` sẽ áp cả M2, không
+kiểm current và chạy seed nếu thiếu dữ liệu nền. `upgrade head` sẽ áp cả M2 và PR-A, không
 chỉ M1. Không dùng downgrade như cách vận hành thường xuyên trên dev/demo.
 
 ### 5. Áp lên DB dev sau kiểm chứng
@@ -194,7 +194,7 @@ và dữ liệu cần bảo toàn. Không suy DB đã được áp từ việc s
 uv run alembic heads
 uv run alembic upgrade a70b8056608d:b15e2c03a001 --sql
 # Chỉ chạy lệnh sau khi đã chọn và cho phép thay đổi đúng DB:
-uv run alembic upgrade head
+uv run alembic upgrade b15e2c03a001
 ```
 
 M2 thêm runtime/state rỗng cho Node M1 đã có: generation 0/0, ba checkpoint NULL,
@@ -210,3 +210,43 @@ Chỉ thử downgrade trên DB test được phép bỏ dữ liệu M2, về `a7
 lại; không downgrade base hay reset seed. Downgrade M2 xóa bảy bảng mới và dữ liệu của
 chúng, giữ tám bảng M1. Empty DB: áp M1 rồi M2; existing M1: M2 tái sử dụng hồ sơ hiện có.
 Fixture SQL có opt-in và rollback được mô tả ở [hướng dẫn phát triển](../docs/development.md).
+
+## PR-A — cột vòng đời Farm/Zone
+
+Revision `fee0fa015af7` nối tiếp M2 `b15e2c03a001`, chỉ thêm vào mỗi bảng `dbo.Farm`
+và `dbo.Zone`: `archived_at DATETIME2(3) NULL` và `row_ver ROWVERSION NOT NULL`.
+Hàng cũ giữ `archived_at=NULL`; SQL Server tự cấp rowversion 8 byte (catalog có thể
+gọi kiểu này là `timestamp`). Không có default thời gian, UPDATE backfill, seed,
+trigger, index hay thay đổi PK/FK/UQ. Tổng vẫn 15 bảng nghiệp vụ. Đây là schema
+chuẩn bị; API CRUD/archive/restore và chuyển đổi manifest thuộc PR-B/C.
+
+Trước khi ghi, xác minh DB/login qua chính `HQ_MIGRATION_DATABASE_URL` theo bước 1;
+chỉ dùng DB test đã được chọn và cho phép thay đổi. Giữ nguyên `.env` và các secret.
+Kiểm current là M2, Farm/Zone chưa có hai cột mới hoặc bất kỳ cột rowversion nào.
+Chụp snapshot chỉ đọc: metadata cột/PK/FK/UQ/index, số hàng và dữ liệu cũ (giữ bằng
+chứng riêng không chứa secret, hash mật khẩu hay số đo thật trong log/Git).
+
+Từ `backend`, review SQL offline trước khi áp:
+
+```powershell
+uv run alembic heads
+uv run alembic current
+uv run alembic upgrade b15e2c03a001:fee0fa015af7 --sql
+# Chỉ khi đúng DB test, current M2 và snapshot đã kiểm:
+uv run alembic upgrade fee0fa015af7
+uv run alembic current
+uv run pytest tests/test_farm_zone_lifecycle_migration.py -v
+```
+
+SQL range phải có đúng bốn ADD COLUMN và cập nhật `alembic_version`; không thực thi
+riêng SQL đã render trên DB do Alembic quản lý. Sau upgrade, đối chiếu current,
+snapshot dữ liệu/schema/constraints, `sys.columns` (datetime2 scale 3 nullable;
+timestamp 8 byte NOT NULL, không default), và mọi Farm/Zone có archive NULL,
+`DATALENGTH(row_ver)=8`. Không coi tests offline là SQL Server acceptance.
+
+Nếu lỗi/mất kết nối, đọc lại revision/catalog/dữ liệu trước khi đề xuất recovery;
+không retry mù, stamp, sửa M1/M2 hoặc reset DB. Downgrade PR-A chỉ bỏ bốn cột mới,
+mất trạng thái archive/version; cần DB disposable riêng và phê duyệt trước, chỉ
+về M2, không downgrade base. Không thử trên DB có dữ liệu cần bảo toàn.
+
+Bằng chứng và phần chưa chạy: [PR-A validation](../docs/farm-zone-lifecycle-validation.md).
