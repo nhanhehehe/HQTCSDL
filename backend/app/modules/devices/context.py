@@ -1,98 +1,125 @@
-import json
-import unicodedata
-
 from sqlalchemy import text
 
+from app.core.web import fail
+from app.modules.areas.schemas import area_code
 from app.modules.devices.schemas import sized
 
 
-def area_code(value):
-    if not isinstance(value, str) or not value or value != value.strip():
-        raise ValueError()
-    sized(value, 128)
-    if any(unicodedata.category(c).startswith("C") for c in value):
-        raise ValueError()
-    return value
-
-
-def parse_manifest(raw):
+def _valid_area_metadata(row: dict, code_key: str) -> bool:
     try:
-        data = json.loads(raw or "")
-        if set(data) != {"farm_code", "zone_codes"}:
-            return None
-        zones = data["zone_codes"]
-        if set(zones) != {"indoor", "outdoor"}:
-            return None
-        area_code(data["farm_code"])
-        for value in zones.values():
-            area_code(value)
-        if zones["indoor"] == zones["outdoor"]:
-            return None
-        return data
-    except (ValueError, TypeError, KeyError, AttributeError, UnicodeError):
-        return None
+        area_code(row[code_key])
+        if not isinstance(row["name"], str) or not row["name"].strip():
+            return False
+        sized(row["name"], 200)
+        if row["description"] is not None:
+            if not isinstance(row["description"], str):
+                return False
+            sized(row["description"], 1000)
+        return True
+    except (ValueError, UnicodeError, AttributeError):
+        return False
 
 
-def read_context(session, manifest, *, lock=False):
-    issues = []
-    result = {"farm": None, "zones": [], "configuration": {"state": "INVALID", "issues": issues}}
+def _legacy_farm(row: dict) -> dict:
+    return {
+        "id": str(row["farm_id"]),
+        "code": row["farm_code"],
+        "name": row["name"],
+        "description": row["description"],
+    }
 
-    def issue(code, kind, expected=None, row=None):
-        item = {"code": code, "entity_type": kind}
-        if expected is not None:
-            item["expected_code"] = expected
-        if row is not None:
-            item["id"] = str(row["id"])
-        issues.append(item)
 
-    def lookup(table, column, expected, kind):
-        rows = (
+def _legacy_zone(row: dict) -> dict:
+    return {
+        "id": str(row["zone_id"]),
+        "farm_id": str(row["farm_id"]),
+        "code": row["zone_code"],
+        "name": row["name"],
+        "description": row["description"],
+    }
+
+
+def read_context(session, farm_id: str | None = None) -> dict:
+    """Read-only legacy /api/v1/context compatibility adapter backed by SQL Server."""
+    issues: list[dict] = []
+    result: dict = {
+        "farm": None,
+        "zones": [],
+        "configuration": {"state": "INVALID", "issues": issues},
+    }
+
+    if farm_id is None:
+        active_farms = (
             session.execute(
                 text(
-                    f"SELECT {table.lower()}_id AS id, {column} AS code, name, description"
-                    + (", farm_id" if table == "Zone" else "")
-                    + f" FROM dbo.{table}"
-                    + (" WITH (UPDLOCK,HOLDLOCK)" if lock else "")
-                    + f" WHERE {column}=:code "
-                    + f"AND DATALENGTH({column})=DATALENGTH(CAST(:code AS NVARCHAR(128)))"
-                ),
-                {"code": expected},
+                    "SELECT farm_id, farm_code, name, description, archived_at "
+                    "FROM dbo.Farm WHERE archived_at IS NULL ORDER BY farm_id ASC"
+                )
             )
             .mappings()
             .all()
         )
-        if len(rows) != 1:
-            issue(f"{kind}_NOT_FOUND" if not rows else f"{kind}_AMBIGUOUS", kind, expected)
-            return None
-        row = dict(rows[0])
-        try:
-            area_code(row["code"])
-            if not row["name"].strip():
-                raise ValueError()
-            sized(row["name"], 200)
-            if row["description"] is not None:
-                sized(row["description"], 1000)
-        except (ValueError, UnicodeError, AttributeError):
-            issue(f"{kind}_INVALID_METADATA", kind, expected, row)
-            return None
-        row["id"] = str(row["id"])
-        if "farm_id" in row:
-            row["farm_id"] = str(row["farm_id"])
-        return row
+        if not active_farms:
+            issues.append({"code": "AREA_NOT_CONFIGURED", "entity_type": "CONFIGURATION"})
+            return result
+        if len(active_farms) > 1:
+            fail(409, "AREA_SELECTION_REQUIRED", "Cần chọn farm_id cụ thể khi có nhiều Farm")
+        farm_row = dict(active_farms[0])
+    else:
+        row = (
+            session.execute(
+                text(
+                    "SELECT farm_id, farm_code, name, description, archived_at "
+                    "FROM dbo.Farm WHERE farm_id = :id"
+                ),
+                {"id": int(farm_id)},
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            fail(404, "NOT_FOUND")
+        farm_row = dict(row)
 
-    if manifest is None:
-        issue("AREA_MANIFEST_INVALID", "CONFIGURATION")
+    farm_valid = _valid_area_metadata(farm_row, "farm_code")
+    if not farm_valid:
+        issues.append(
+            {"code": "INVALID_METADATA", "entity_type": "FARM", "id": str(farm_row["farm_id"])}
+        )
         return result
-    farm = lookup("Farm", "farm_code", manifest["farm_code"], "FARM")
-    result["farm"] = farm
-    if farm:
-        for role in ("indoor", "outdoor"):
-            expected = manifest["zone_codes"][role]
-            zone = lookup("Zone", "zone_code", expected, "ZONE")
-            if zone and zone["farm_id"] != farm["id"]:
-                issue("ZONE_FARM_MISMATCH", "ZONE", expected, zone)
-            elif zone:
-                result["zones"].append(zone)
+
+    result["farm"] = _legacy_farm(farm_row)
+    if farm_row["archived_at"] is not None:
+        issues.append(
+            {"code": "AREA_ARCHIVED", "entity_type": "FARM", "id": str(farm_row["farm_id"])}
+        )
+        return result
+
+    zone_rows = (
+        session.execute(
+            text(
+                "SELECT zone_id, farm_id, zone_code, name, description "
+                "FROM dbo.Zone WHERE farm_id = :farm_id AND archived_at IS NULL "
+                "ORDER BY zone_id ASC"
+            ),
+            {"farm_id": farm_row["farm_id"]},
+        )
+        .mappings()
+        .all()
+    )
+    for z in zone_rows:
+        z_dict = dict(z)
+        if not _valid_area_metadata(z_dict, "zone_code"):
+            issues.append(
+                {
+                    "code": "INVALID_METADATA",
+                    "entity_type": "ZONE",
+                    "id": str(z_dict["zone_id"]),
+                }
+            )
+        else:
+            result["zones"].append(_legacy_zone(z_dict))
+
     if not issues:
         result["configuration"]["state"] = "VALID"
     return result

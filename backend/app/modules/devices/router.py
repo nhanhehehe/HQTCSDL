@@ -28,8 +28,10 @@ def checked(function, value):
 
 @router.get("/context")
 def context(request: Request):
-    shape(request, set())
-    return request.app.state.devices.context(request.cookies.get("hq_session"))
+    shape(request, {"farm_id"})
+    raw_farm_id = request.query_params.get("farm_id")
+    farm_id = checked(identity, raw_farm_id) if raw_farm_id is not None else None
+    return request.app.state.devices.context(request.cookies.get("hq_session"), farm_id=farm_id)
 
 
 def register(kind):

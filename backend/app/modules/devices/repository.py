@@ -9,6 +9,53 @@ TABLES = {
 }
 
 
+def resolve_gateway_farm_id(session, gateway_id: str) -> int | None:
+    return session.execute(
+        text("SELECT farm_id FROM dbo.Gateway WHERE gateway_id = :id"),
+        {"id": int(gateway_id)},
+    ).scalar()
+
+
+def resolve_node_parents(session, node_id: str) -> dict | None:
+    row = (
+        session.execute(
+            text(
+                "SELECT n.node_id, n.zone_id, z.farm_id, n.gateway_id "
+                "FROM dbo.Node n JOIN dbo.Zone z ON z.zone_id = n.zone_id "
+                "WHERE n.node_id = :id"
+            ),
+            {"id": int(node_id)},
+        )
+        .mappings()
+        .first()
+    )
+    return dict(row) if row is not None else None
+
+
+def lock_gateway(session, gateway_id: int | str) -> dict | None:
+    row = (
+        session.execute(
+            text("SELECT * FROM dbo.Gateway WITH (UPDLOCK, HOLDLOCK) WHERE gateway_id = :id"),
+            {"id": int(gateway_id)},
+        )
+        .mappings()
+        .first()
+    )
+    return dict(row) if row is not None else None
+
+
+def lock_node(session, node_id: int | str) -> dict | None:
+    row = (
+        session.execute(
+            text("SELECT * FROM dbo.Node WITH (UPDLOCK, HOLDLOCK) WHERE node_id = :id"),
+            {"id": int(node_id)},
+        )
+        .mappings()
+        .first()
+    )
+    return dict(row) if row is not None else None
+
+
 def profile(session, kind, row_id):
     table, pk, business = TABLES[kind]
     row = (

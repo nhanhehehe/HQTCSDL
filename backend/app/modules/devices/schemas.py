@@ -61,7 +61,9 @@ class NodeCreate(Editable):
 
 class GatewayCreate(Editable):
     gateway_id: str
+    farm_id: str
     _gateway = field_validator("gateway_id")(code)
+    _farm = field_validator("farm_id")(identity)
 
 
 class ProfilePatch(WebModel):
