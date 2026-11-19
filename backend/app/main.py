@@ -12,8 +12,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import BACKEND_DIR, Settings
 from app.core.db import Database
 from app.core.errors import (
+    IngestionError,
     WebError,
     http_error,
+    ingestion_error,
     problem,
     unexpected_error,
     validation_error,
@@ -25,6 +27,8 @@ from app.modules.auth.router import router as auth_router
 from app.modules.auth.service import AuthService
 from app.modules.devices.router import router as devices_router
 from app.modules.devices.service import DeviceService
+from app.modules.ingestion.router import router as ingestion_router
+from app.modules.ingestion.service import IngestionService
 
 logger = logging.getLogger("uvicorn.error.hqtcsdl")
 
@@ -45,7 +49,9 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
     app.state.auth = AuthService(database, settings)
     app.state.areas = AreaService(database, settings)
     app.state.devices = DeviceService(database, settings)
+    app.state.ingestion = IngestionService(database, settings)
     app.add_exception_handler(WebError, web_error)
+    app.add_exception_handler(IngestionError, ingestion_error)
     app.add_exception_handler(StarletteHTTPException, http_error)
     app.add_exception_handler(RequestValidationError, validation_error)
     app.add_exception_handler(Exception, unexpected_error)
@@ -100,6 +106,7 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
     app.include_router(auth_router)
     app.include_router(areas_router)
     app.include_router(devices_router)
+    app.include_router(ingestion_router)
 
     @app.api_route(
         "/{path:path}",

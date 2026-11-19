@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     cursor_secret: SecretStr | None = None
     dataset_generation: str = "1"
+    ingestion_max_body_bytes: int = 65536
+
+    @field_validator("ingestion_max_body_bytes")
+    @classmethod
+    def positive_body_limit(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("HQ_INGESTION_MAX_BODY_BYTES must be positive")
+        return value
 
     @model_validator(mode="after")
     def secure_https_cookie(self):

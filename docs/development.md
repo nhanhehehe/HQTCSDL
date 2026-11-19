@@ -362,5 +362,66 @@ Không cần phần cứng để đăng ký hồ sơ hay cấp khóa.
 Kiểm tra offline G1: từ `backend/` chạy `pytest tests/test_areas.py tests/test_devices.py tests/test_gateway_credentials.py tests/test_metrics.py`;
 kiểm tra SQL Server thật (opt-in trên DB test disposable đã lên `fee0fa015af7`):
 `$env:HQ_RUN_SQL_TESTS='1'; $env:HQ_EXPECT_TEST_DATABASE='HQTCSDL_test_ten'; pytest tests/test_sql_g1.py -v`.
-Ghi chú: ingestion thực tế bằng `X-API-Key` (`DEFERRED_G2`) và bật/tắt quyền nhận
-(`DEFERRED_FL04`) chưa thuộc phạm vi G1.
+Ghi chú: bật/tắt quyền nhận (`DEFERRED_FL04`) vẫn thuộc phạm vi G4.
+
+## FL-06 — Ingestion, ACK2 và Gateway Simulator
+
+Endpoint `POST /api/v1/ingestion/measurements` sử dụng xác thực `X-API-Key` (không dùng cookie/CSRF web), giới hạn body mặc định `HQ_INGESTION_MAX_BODY_BYTES=65536` (64 KiB, vượt trả `413 PAYLOAD_TOO_LARGE`), từ chối unknown fields, dùng Canonical-v1 và xử lý 1 transaction/record (`READ COMMITTED` + `SET XACT_ABORT ON`) theo thứ tự khóa `Farm (id ASC) -> Zone -> Gateway -> Node -> state`.
+
+### Mẫu SQL có guard cho provisioning kỹ thuật `Node.gateway_id` (`G2-D04`)
+
+Theo `FL-03`, Web UI không có chức năng ghép cặp `Node–Gateway`. Khi cần gán `Node.gateway_id` trên **DB test/local** (thay placeholder trước khi chạy, tuyệt đối không chạy nhầm DB đo thật):
+
+```sql
+-- Kiểm tra đúng DB đích trước khi ghi
+IF DB_NAME() <> N'HQTCSDL_test_ten'
+BEGIN
+    THROW 50001, N'Sai database đích; dừng thao tác provisioning.', 1;
+END;
+
+DECLARE @device_code VARCHAR(128) = 'REPLACE_DEVICE_CODE';
+DECLARE @gateway_code VARCHAR(128) = 'REPLACE_GATEWAY_CODE';
+
+SET XACT_ABORT ON;
+BEGIN TRANSACTION;
+
+DECLARE @node_id BIGINT, @zone_id BIGINT, @zone_farm_id BIGINT, @gateway_id BIGINT, @gw_farm_id BIGINT;
+
+SELECT @node_id = n.node_id, @zone_id = n.zone_id, @zone_farm_id = z.farm_id
+FROM dbo.Node n
+JOIN dbo.Zone z ON z.zone_id = n.zone_id
+JOIN dbo.Farm f ON f.farm_id = z.farm_id
+WHERE n.device_code = @device_code
+  AND DATALENGTH(n.device_code) = DATALENGTH(CAST(@device_code AS VARCHAR(128)))
+  AND z.archived_at IS NULL
+  AND f.archived_at IS NULL;
+
+SELECT @gateway_id = g.gateway_id, @gw_farm_id = g.farm_id
+FROM dbo.Gateway g
+JOIN dbo.Farm f ON f.farm_id = g.farm_id
+WHERE g.gateway_code = @gateway_code
+  AND DATALENGTH(g.gateway_code) = DATALENGTH(CAST(@gateway_code AS VARCHAR(128)))
+  AND f.archived_at IS NULL;
+
+IF @node_id IS NULL OR @gateway_id IS NULL OR @zone_farm_id <> @gw_farm_id
+BEGIN
+    ROLLBACK TRANSACTION;
+    THROW 50002, N'Node/Gateway không tồn tại, đã lưu trữ hoặc không cùng Farm.', 1;
+END;
+
+UPDATE dbo.Node SET gateway_id = @gateway_id WHERE node_id = @node_id;
+COMMIT TRANSACTION;
+```
+
+### Kiểm thử G2 và chạy Simulator
+
+- Offline (từ `backend/`): `uv run pytest tests/test_ingestion_canonical.py tests/test_ingestion_api.py tests/test_gateway_simulator.py -v`
+- SQL Server thật opt-in trên DB test disposable đã lên `fee0fa015af7` (từ `backend/`):
+  ```powershell
+  $env:HQ_RUN_SQL_TESTS = '1'
+  $env:HQ_EXPECT_TEST_DATABASE = 'HQTCSDL_test_ten'
+  uv run pytest tests/test_sql_g2.py -v
+  Remove-Item Env:HQ_RUN_SQL_TESTS
+  Remove-Item Env:HQ_EXPECT_TEST_DATABASE
+  ```
+- Gateway Simulator CLI: xem hướng dẫn chạy và giới hạn phần mềm tại [tools/README.md](../tools/README.md).

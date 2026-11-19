@@ -12,8 +12,63 @@ class WebError(Exception):
         self.message = message
 
 
+class IngestionError(Exception):
+    def __init__(
+        self,
+        status: int,
+        code: str,
+        message: str,
+        *,
+        retryable: bool | None = None,
+        details: list[dict[str, str]] | None = None,
+        headers: dict[str, str] | None = None,
+    ):
+        self.status = status
+        self.code = code
+        self.message = message
+        self.retryable = status in {429, 500, 503} if retryable is None else retryable
+        self.details = details
+        self.headers = headers
+
+
+def ingestion_error_response(
+    status: int,
+    code: str,
+    message: str,
+    *,
+    retryable: bool | None = None,
+    details: list[dict[str, str]] | None = None,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    error_body: dict = {"code": code, "message": message}
+    if details:
+        error_body["details"] = details
+    response_headers = {"Cache-Control": "no-store"}
+    if headers:
+        response_headers.update(headers)
+    return JSONResponse(
+        status_code=status,
+        content={
+            "error": error_body,
+            "retryable": status in {429, 500, 503} if retryable is None else retryable,
+        },
+        headers=response_headers,
+    )
+
+
 async def web_error(request: Request, exc: WebError) -> JSONResponse:
     return problem(request, exc.status, exc.message, exc.code)
+
+
+async def ingestion_error(request: Request, exc: IngestionError) -> JSONResponse:
+    return ingestion_error_response(
+        exc.status,
+        exc.code,
+        exc.message,
+        retryable=exc.retryable,
+        details=exc.details,
+        headers=exc.headers,
+    )
 
 
 def problem(request: Request, status: int, title: str, code: str | None = None) -> JSONResponse:
@@ -21,6 +76,24 @@ def problem(request: Request, status: int, title: str, code: str | None = None) 
 
     is_web = path == "/api/v1" or path.startswith("/api/v1/")
     is_ingestion = path == "/api/v1/ingestion" or path.startswith("/api/v1/ingestion/")
+
+    if is_ingestion:
+        ingestion_codes = {
+            400: "INVALID_REQUEST",
+            401: "AUTHENTICATION_FAILED",
+            403: "GATEWAY_FORBIDDEN",
+            404: "INVALID_REQUEST",
+            405: "INVALID_REQUEST",
+            413: "PAYLOAD_TOO_LARGE",
+            429: "RATE_LIMITED",
+            500: "INTERNAL_ERROR",
+            503: "SERVICE_UNAVAILABLE",
+        }
+        return ingestion_error_response(
+            status,
+            code or ingestion_codes.get(status, "INTERNAL_ERROR"),
+            title,
+        )
 
     if is_web and not is_ingestion:
         codes = {
@@ -80,6 +153,9 @@ async def validation_error(
 
     is_web = path == "/api/v1" or path.startswith("/api/v1/")
     is_ingestion = path == "/api/v1/ingestion" or path.startswith("/api/v1/ingestion/")
+
+    if is_ingestion:
+        return ingestion_error_response(400, "INVALID_REQUEST", "Invalid ingestion request")
 
     if is_web and not is_ingestion:
         fields = sorted(

@@ -20,15 +20,16 @@ Code cũ đã lưu tại `archive/legacy-before-foundation`; khung này bắt đ
 | --- | --- | --- |
 | FL-01 — Auth | Admin CLI, login/session/logout, cookie/CSRF và FE xác thực | Không có tài khoản mặc định, đăng ký web hoặc reset mật khẩu |
 | FL-02 — Khu vực | CRUD & vòng đời `archive`/`restore` Farm/Zone trên SQL Server (`/api/v1/farms`, `/zones`), adapter `/api/v1/context?farm_id={id}` | Archive bị chặn (`409 AREA_IN_USE`) nếu còn thiết bị bật quyền; tắt quyền thuộc FL-04 (G4) |
-| FL-03 — Hồ sơ & Khóa | Tạo/list/detail/PATCH Node/Gateway (chọn `farm_id`/`zone_id` từ DB); cấp/xem/thu hồi Gateway Credential (tối đa 2 active); `GET /api/v1/metrics` | Không ghép/chuyển/xóa thiết bị hoặc bật/tắt quyền; rotation E2E với ingestion thuộc G2 |
-| M1/M2 và PR-A — CSDL | 15 bảng nghiệp vụ; PR-A (`fee0fa015af7`) thêm `archived_at`/`row_ver` cho Farm/Zone | Chưa có M3 (episode/audit), ingestion hay worker |
+| FL-03 — Hồ sơ & Khóa | Tạo/list/detail/PATCH Node/Gateway (chọn `farm_id`/`zone_id` từ DB); cấp/xem/thu hồi Gateway Credential (tối đa 2 active); `GET /api/v1/metrics` | Không ghép/chuyển/xóa thiết bị hoặc bật/tắt quyền (FL-04 thuộc G4) |
+| FL-06 — Ingestion & Simulator | `POST /api/v1/ingestion/measurements` (`X-API-Key`, D04/D05/D06, Canonical-v1, per-record Tx, ACK2, `NodeRuntime`/`EvaluationState`) và Gateway Simulator CLI (`tools/gateway_simulator`) | Simulator kiểm chứng hợp đồng phần mềm, không thay ESP32/LoRa HMAC/Flash-SD thật (`FL-05`); chưa có worker đánh giá (`G4`) |
+| M1/M2 và PR-A — CSDL | 15 bảng nghiệp vụ; PR-A (`fee0fa015af7`) thêm `archived_at`/`row_ver` cho Farm/Zone | Chưa có M3 (episode/audit) hay monitoring worker (thuộc G4) |
 
 Node mới chưa gắn Gateway vẫn là hồ sơ hợp lệ, hiển thị **Chưa liên kết Gateway**.
 Tạo hồ sơ không đợi phần cứng và không chứng minh thiết bị online. Chưa có bản đo
 thì mốc cuối lưu là null; không tự tạo số đo, ngưỡng hoặc period giả.
 
-Source hiện tại chưa có M3, bật/tắt quyền nhận (FL-04), ingestion/ACK2 (FL-06),
-API xem số đo, cấu hình giám sát, worker cảnh báo, dashboard hoặc báo cáo nghiệp vụ. Trạng thái
+Source hiện tại chưa có M3, bật/tắt quyền nhận (FL-04),
+API xem số đo (FL-07), cấu hình giám sát (FL-08), worker cảnh báo (FL-09/10/11), dashboard hoặc báo cáo nghiệp vụ (FL-12/13). Trạng thái
 source trong checkout này không chứng minh tính năng đã merge, đã áp lên mọi DB
 hoặc đã nghiệm thu đầy đủ AC/NFR.
 
@@ -218,6 +219,7 @@ hai kết nối đồng thời, snapshot/pool và logout/write race. Không di�
 | --- | --- | --- |
 | Auth/session/CSRF | [Backend auth](backend/app/modules/auth), [FE auth](frontend/src/features/auth) | [API/auth tests](backend/tests/test_auth.py), [session FE tests](frontend/tests/auth-session.test.mjs) |
 | Khu vực, hồ sơ & khóa | [Backend areas](backend/app/modules/areas), [Backend devices](backend/app/modules/devices), [FE areas/devices](frontend/src/features) | [Areas/Devices/Credentials/Metrics tests](backend/tests), [SQL G1 opt-in](backend/tests/test_sql_g1.py), [G1 FE tests](frontend/tests/g1-admin.test.mjs) |
+| Ingestion, ACK2 & Simulator | [Backend ingestion](backend/app/modules/ingestion), [Gateway simulator](tools/gateway_simulator) | [Canonical/API/Simulator tests](backend/tests), [SQL G2 opt-in](backend/tests/test_sql_g2.py), [G2 validation](docs/g2-ingestion-validation.md) |
 | M1/M2/PR-A và CSDL | [Migrations](backend/migrations/versions), [hướng dẫn CSDL](database/README.md) | [DDL offline](backend/tests/test_m2_migration.py), [PR-A tests](backend/tests/test_farm_zone_lifecycle_migration.py), [SQL opt-in](backend/tests/test_sql_auth_m2.py) |
 | Request cũ/401/lỗi mạng | [FE client](frontend/src/api/client.ts) | [Client tests](frontend/tests/api-client.test.mjs) |
 
