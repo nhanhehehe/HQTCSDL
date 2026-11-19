@@ -98,7 +98,7 @@ function Devices({ csrf }: { csrf: string }) {
     const all: T[] = []
     let nextCursor: string | null = null
     do {
-      const params = new URLSearchParams({ status: 'ACTIVE', page_size: '100' })
+      const params = new URLSearchParams({ status: 'ACTIVE', page_size: '10' })
       if (nextCursor) params.set('cursor', nextCursor)
       const page = await requestJson<{ items: T[]; next_cursor: string | null }>(
         `${basePath}?${params}`,
@@ -175,7 +175,7 @@ function Devices({ csrf }: { csrf: string }) {
     const active = ++generation.current
     setBusy(true)
     try {
-      const params = new URLSearchParams()
+      const params = new URLSearchParams({ page_size: '10' })
       if (filter) params.set(kind === 'nodes' ? 'device_id' : 'gateway_id', filter)
       if (more && cursor) params.set('cursor', cursor)
       const value = await requestJson<Page>(`/api/v1/${kind}?${params}`)
@@ -293,7 +293,7 @@ function Devices({ csrf }: { csrf: string }) {
     const active = ++credGen.current
     setBusy(true)
     try {
-      const params = new URLSearchParams()
+      const params = new URLSearchParams({ page_size: '10' })
       if (more && credCursor) params.set('cursor', credCursor)
       const page = await requestJson<CredentialPage>(
         `/api/v1/gateways/${selected.id}/credentials?${params}`,
