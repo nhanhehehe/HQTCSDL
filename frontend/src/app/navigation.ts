@@ -10,7 +10,7 @@ export type NavItem = {
   operational: boolean
 }
 
-export const DEFAULT_AUTHENTICATED_ROUTE = '/areas'
+export const DEFAULT_AUTHENTICATED_ROUTE = '/dashboard'
 
 export const NAV_GROUPS: ReadonlyArray<{ id: NavGroupId; title: string; items: ReadonlyArray<NavItem> }> = [
   {

@@ -3,15 +3,15 @@ import { AppShell } from '../components/AppShell'
 import { AreasPanel } from '../features/areas/AreasPanel'
 import { useAuth } from '../features/auth/AuthProvider'
 import { LoginPage } from '../features/auth/LoginPage'
+import { DashboardPage } from '../features/dashboard/DashboardPage'
 import { DevicesPanel } from '../features/devices/DevicesPanel'
+import { MeasurementsPage } from '../features/measurements/MeasurementsPage'
 import {
   AlertDetailPlaceholderPage,
   AlertsPlaceholderPage,
-  DashboardPlaceholderPage,
-  MeasurementsPlaceholderPage,
   MonitoringPlaceholderPage,
-  ReportsPlaceholderPage,
 } from '../features/placeholders/FutureModulePages'
+import { ReportsPage } from '../features/reports/ReportsPage'
 import { DEFAULT_AUTHENTICATED_ROUTE, resolveAuthView } from './navigation'
 import { OperationalFarmProvider, OperationalFarmSelector } from './OperationalFarmContext'
 
@@ -24,9 +24,9 @@ function AuthenticatedRoutes() {
           <Route path="/login" element={<Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace />} />
           <Route path="/areas" element={<AreasPanel />} />
           <Route path="/devices" element={<DevicesPanel />} />
-          <Route path="/dashboard" element={<DashboardPlaceholderPage />} />
-          <Route path="/measurements" element={<MeasurementsPlaceholderPage />} />
-          <Route path="/reports" element={<ReportsPlaceholderPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/measurements" element={<MeasurementsPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/monitoring" element={<MonitoringPlaceholderPage />} />
           <Route path="/alerts" element={<AlertsPlaceholderPage />} />
           <Route path="/alerts/:id" element={<AlertDetailPlaceholderPage />} />

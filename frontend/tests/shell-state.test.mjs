@@ -30,11 +30,11 @@ async function loadShellModules() {
   return { ...client, ...nav, ...storeMod }
 }
 
-test('navigation policy defines /areas default, operational routes, and all 5 auth view states', async () => {
+test('navigation policy defines /dashboard default, operational routes, and all 5 auth view states', async () => {
   const { DEFAULT_AUTHENTICATED_ROUTE, isOperationalRoute, resolveAuthView } =
     await loadShellModules()
 
-  assert.equal(DEFAULT_AUTHENTICATED_ROUTE, '/areas')
+  assert.equal(DEFAULT_AUTHENTICATED_ROUTE, '/dashboard')
 
   for (const path of ['/dashboard', '/measurements', '/reports', '/monitoring', '/alerts', '/alerts/42', '/alerts/']) {
     assert.equal(isOperationalRoute(path), true, `Expected operational route for ${path}`)
