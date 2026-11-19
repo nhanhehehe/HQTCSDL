@@ -91,7 +91,7 @@ function Areas({ csrf }: { csrf: string }) {
     const active = ++farmGen.current
     setBusy(true)
     try {
-      const params = new URLSearchParams({ status: farmStatus })
+      const params = new URLSearchParams({ status: farmStatus, page_size: '10' })
       if (farmFilter) params.set('code', farmFilter)
       if (more && farmCursor) params.set('cursor', farmCursor)
       const page = await requestJson<FarmPage>(`/api/v1/farms?${params}`)
@@ -213,7 +213,7 @@ function Areas({ csrf }: { csrf: string }) {
     const targetFarmId = selectedFarm.id
     setBusy(true)
     try {
-      const params = new URLSearchParams({ status: zoneStatus })
+      const params = new URLSearchParams({ status: zoneStatus, page_size: '10' })
       if (zoneFilter) params.set('code', zoneFilter)
       if (more && zoneCursor) params.set('cursor', zoneCursor)
       const page = await requestJson<ZonePage>(`/api/v1/farms/${targetFarmId}/zones?${params}`)

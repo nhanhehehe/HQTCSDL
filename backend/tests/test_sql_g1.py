@@ -58,6 +58,7 @@ def sql_g1_env():
         conn.rollback()
 
     tag = "testg1-" + uuid4().hex[:12]
+    tag_b = f"{tag}-b"
     created_farm_ids: list[int] = []
 
     from sqlalchemy.orm import sessionmaker
@@ -65,12 +66,23 @@ def sql_g1_env():
     SessionFactory = sessionmaker(bind=engine, expire_on_commit=False)
     with SessionFactory.begin() as s:
         auth_repo.create_admin(s, tag, password_hasher.hash("fixture-password"))
+        auth_repo.create_admin(s, tag_b, password_hasher.hash("fixture-password"))
 
     auth_svc = AuthService(SimpleNamespace(sessions=SessionFactory), settings)
     dto, cookie, _ = auth_svc.login(tag, "fixture-password", None)
+    dto_b, cookie_b, _ = auth_svc.login(tag_b, "fixture-password", None)
 
     try:
-        yield engine, settings, tag, cookie, dto.csrf_token, created_farm_ids
+        yield (
+            engine,
+            settings,
+            tag,
+            cookie,
+            dto.csrf_token,
+            cookie_b,
+            dto_b.csrf_token,
+            created_farm_ids,
+        )
     finally:
         with SessionFactory.begin() as s:
             if created_farm_ids:
@@ -120,7 +132,7 @@ def sql_g1_env():
 
 
 def test_sql_g1_lifecycle_profiles_credentials_and_metrics(sql_g1_env):
-    engine, settings, tag, cookie, csrf, created_farm_ids = sql_g1_env
+    engine, settings, tag, cookie, csrf, _, _, created_farm_ids = sql_g1_env
     db = _EngineDB(engine)
     area_svc = AreaService(db, settings)
     dev_svc = DeviceService(db, settings)
@@ -260,45 +272,45 @@ def test_sql_g1_lifecycle_profiles_credentials_and_metrics(sql_g1_env):
 
 
 def test_sql_g1_two_connection_races(sql_g1_env):
-    engine, settings, tag, cookie, csrf, created_farm_ids = sql_g1_env
+    engine, settings, tag, cookie_a, csrf_a, cookie_b, csrf_b, created_farm_ids = sql_g1_env
     db = _EngineDB(engine)
     area_svc = AreaService(db, settings)
     dev_svc = DeviceService(db, settings)
 
-    farm = area_svc.create_farm(cookie, csrf, AreaCreate(code=f"{tag}-R", name="Race Farm"))
+    farm = area_svc.create_farm(cookie_a, csrf_a, AreaCreate(code=f"{tag}-R", name="Race Farm"))
     created_farm_ids.append(int(farm["id"]))
     zone = area_svc.create_zone(
-        cookie, csrf, farm["id"], AreaCreate(code=f"{tag}-RZ", name="Race Zone")
+        cookie_a, csrf_a, farm["id"], AreaCreate(code=f"{tag}-RZ", name="Race Zone")
     )
     gw = dev_svc.create(
-        cookie,
-        csrf,
+        cookie_a,
+        csrf_a,
         "gateways",
         GatewayCreate(gateway_id=f"{tag}-RGW", name="Race GW", farm_id=farm["id"]),
     )
 
-    # Race 1: Two concurrent credential issues when 1 already active -> max 2 active
-    dev_svc.issue_credential(cookie, csrf, gateway_id=gw["id"])
+    # Race 1: Two independent sessions issue credentials concurrently when 1 active -> max 2.
+    dev_svc.issue_credential(cookie_a, csrf_a, gateway_id=gw["id"])
     barrier1 = threading.Barrier(2)
     results1: list[str] = []
 
-    def worker_issue():
+    def worker_issue(c_cookie: str, c_csrf: str):
         barrier1.wait()
         try:
-            dev_svc.issue_credential(cookie, csrf, gateway_id=gw["id"])
+            dev_svc.issue_credential(c_cookie, c_csrf, gateway_id=gw["id"])
             results1.append("201")
         except WebError as exc:
             results1.append(exc.code)
 
-    t1 = threading.Thread(target=worker_issue)
-    t2 = threading.Thread(target=worker_issue)
+    t1 = threading.Thread(target=worker_issue, args=(cookie_a, csrf_a))
+    t2 = threading.Thread(target=worker_issue, args=(cookie_b, csrf_b))
     t1.start()
     t2.start()
     t1.join()
     t2.join()
     assert sorted(results1) == ["201", "CREDENTIAL_LIMIT_REACHED"]
 
-    # Race 2: Archive Zone vs Create Node in same Zone -> never active child under archived parent
+    # Race 2: Two independent sessions race archive Zone vs Create Node.
     barrier2 = threading.Barrier(2)
     results2: list[str] = []
 
@@ -306,8 +318,8 @@ def test_sql_g1_two_connection_races(sql_g1_env):
         barrier2.wait()
         try:
             area_svc.archive_zone(
-                cookie,
-                csrf,
+                cookie_a,
+                csrf_a,
                 zone["id"],
                 AreaLifecycleAction(expected_row_version=zone["row_version"]),
             )
@@ -319,8 +331,8 @@ def test_sql_g1_two_connection_races(sql_g1_env):
         barrier2.wait()
         try:
             dev_svc.create(
-                cookie,
-                csrf,
+                cookie_b,
+                csrf_b,
                 "nodes",
                 NodeCreate(device_id=f"{tag}-RN", name="Race Node", zone_id=zone["id"]),
             )

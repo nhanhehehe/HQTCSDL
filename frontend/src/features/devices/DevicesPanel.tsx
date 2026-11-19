@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ApiError, requestJson } from '../../api/client'
 import { useAuth } from '../auth/AuthProvider'
 import type { FarmView, ZoneView } from '../areas/AreasPanel'
+import { FarmZoneLoader } from '../areas/loader'
 
 type Profile = {
   id: string
@@ -78,17 +79,18 @@ function Devices({ csrf }: { csrf: string }) {
   const [credMessage, setCredMessage] = useState('')
 
   const generation = useRef(0)
-  const zoneGen = useRef(0)
+  const areaLoader = useRef(new FarmZoneLoader())
   const credGen = useRef(0)
   const operation = useRef(false)
   const mounted = useRef(true)
 
   useEffect(() => {
     mounted.current = true
+    const loader = areaLoader.current
     return () => {
       mounted.current = false
       generation.current++
-      zoneGen.current++
+      loader.dispose()
       credGen.current++
       setIssuedKey(null)
     }
@@ -96,12 +98,12 @@ function Devices({ csrf }: { csrf: string }) {
 
   async function refreshAreasAndMetrics(signal?: AbortSignal) {
     try {
-      const [farmPage, metricsRes] = await Promise.all([
-        requestJson<{ items: FarmView[] }>('/api/v1/farms?status=ACTIVE&page_size=100', { signal }),
+      const [allFarms, metricsRes] = await Promise.all([
+        areaLoader.current.loadActiveFarms(signal),
         requestJson<{ items: MetricDef[] }>('/api/v1/metrics', { signal }),
       ])
       if (!mounted.current || signal?.aborted) return
-      setFarms(farmPage.items)
+      setFarms(allFarms)
       setMetricsCatalog(metricsRes.items)
     } catch {
       if (!signal?.aborted && mounted.current) {
@@ -117,24 +119,19 @@ function Devices({ csrf }: { csrf: string }) {
   }, [])
 
   function handleFarmChange(nextFarmId: string) {
-    zoneGen.current++
-    setSelectedFarmId(nextFarmId)
-    setZones([])
-    setZone('')
-    if (!nextFarmId) return
-    const activeZoneGen = zoneGen.current
-    void requestJson<{ items: ZoneView[] }>(
-      `/api/v1/farms/${nextFarmId}/zones?status=ACTIVE&page_size=100`,
-    )
-      .then(page => {
-        if (!mounted.current || activeZoneGen !== zoneGen.current) return
-        setZones(page.items)
-      })
-      .catch(() => {
-        if (mounted.current && activeZoneGen === zoneGen.current) {
-          setMessage('Không tải được Zone thuộc Farm đã chọn.')
-        }
-      })
+    void areaLoader.current.selectFarm(nextFarmId, {
+      onReset: farmId => {
+        setSelectedFarmId(farmId)
+        setZones([])
+        setZone('')
+      },
+      onLoaded: allZones => {
+        if (mounted.current) setZones(allZones)
+      },
+      onError: () => {
+        if (mounted.current) setMessage('Không tải được Zone thuộc Farm đã chọn.')
+      },
+    })
   }
 
   useEffect(() => {
@@ -161,7 +158,7 @@ function Devices({ csrf }: { csrf: string }) {
     const active = ++generation.current
     setBusy(true)
     try {
-      const params = new URLSearchParams()
+      const params = new URLSearchParams({ page_size: '10' })
       if (filter) params.set(kind === 'nodes' ? 'device_id' : 'gateway_id', filter)
       if (more && cursor) params.set('cursor', cursor)
       const value = await requestJson<Page>(`/api/v1/${kind}?${params}`)
@@ -279,7 +276,7 @@ function Devices({ csrf }: { csrf: string }) {
     const active = ++credGen.current
     setBusy(true)
     try {
-      const params = new URLSearchParams()
+      const params = new URLSearchParams({ page_size: '10' })
       if (more && credCursor) params.set('cursor', credCursor)
       const page = await requestJson<CredentialPage>(
         `/api/v1/gateways/${selected.id}/credentials?${params}`,
