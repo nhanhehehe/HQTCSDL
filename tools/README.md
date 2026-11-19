@@ -12,17 +12,28 @@ Chỉ trỏ vào Backend đang kết nối **DB test/local riêng** (tuyệt đ�
 
 ```powershell
 # 1) Nạp một bản ghi mẫu vào hàng đợi bền vững cục bộ
-uv --project backend run python -m tools.gateway_simulator.cli --state .tmp-sim-queue.json enqueue --device-id NODE-01 --boot-id 1 --seq 1
+uv --project backend run python -m tools.gateway_simulator.cli --state .tmp-sim-queue.json enqueue --device-id NODE-SIM-01 --boot-id 1 --seq 1
+uv --project backend run python -m tools.gateway_simulator.cli --state .tmp-sim-queue.json enqueue --device-id NODE-SIM-01 --boot-id 1 --seq 2 --time-status UNKNOWN
 
 # 2) Đặt API key vào biến môi trường (không truyền qua tham số dòng lệnh)
 $env:HQ_SIM_API_KEY="REPLACE_WITH_ISSUED_GATEWAY_KEY"
 
+# Kịch bản 1: Giả lập MẤT PHẢN HỒI sau khi server commit -> pending vẫn giữ nguyên 2 bản
 # 3) Đồng bộ một batch lên Backend local
 uv --project backend run python -m tools.gateway_simulator.cli --state .tmp-sim-queue.json sync --base-url http://127.0.0.1:8000 --gateway-id GW-01
 
 # 4) Xem trạng thái hàng đợi
 uv --project backend run python -m tools.gateway_simulator.cli --state .tmp-sim-queue.json status
+
+# Kịch bản 2: Gửi lại (idempotent retry) -> Backend trả ALREADY_EXISTS, ack=true -> Simulator giải phóng hàng đợi về pending=0
+uv --project backend run python -m tools.gateway_simulator.cli --state .tmp-sim-queue.json sync --base-url http://127.0.0.1:8000 --gateway-id GW-SIM-01
+uv --project backend run python -m tools.gateway_simulator.cli --state .tmp-sim-queue.json status
+
+Remove-Item .tmp-sim-queue.json -ErrorAction SilentlyContinue
+Remove-Item Env:HQ_SIM_API_KEY -ErrorAction SilentlyContinue
 ```
+
+
 
 ## Giới hạn kiểm chứng
 
