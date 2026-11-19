@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ApiError, requestJson } from '../../api/client'
 import { useAuth } from '../auth/AuthProvider'
 import type { FarmView, ZoneView } from '../areas/AreasPanel'
+import { FarmZoneLoader } from '../areas/loader'
 
 type Profile = {
   id: string
@@ -78,42 +79,27 @@ function Devices({ csrf }: { csrf: string }) {
   const [credMessage, setCredMessage] = useState('')
 
   const generation = useRef(0)
-  const zoneGen = useRef(0)
+  const areaLoader = useRef(new FarmZoneLoader())
   const credGen = useRef(0)
   const operation = useRef(false)
   const mounted = useRef(true)
 
   useEffect(() => {
     mounted.current = true
+    const loader = areaLoader.current
     return () => {
       mounted.current = false
       generation.current++
-      zoneGen.current++
+      loader.dispose()
       credGen.current++
       setIssuedKey(null)
     }
   }, [])
 
-  async function fetchAllActivePages<T>(basePath: string, signal?: AbortSignal): Promise<T[]> {
-    const all: T[] = []
-    let nextCursor: string | null = null
-    do {
-      const params = new URLSearchParams({ status: 'ACTIVE', page_size: '10' })
-      if (nextCursor) params.set('cursor', nextCursor)
-      const page = await requestJson<{ items: T[]; next_cursor: string | null }>(
-        `${basePath}?${params}`,
-        { signal },
-      )
-      all.push(...page.items)
-      nextCursor = page.next_cursor
-    } while (nextCursor !== null && !signal?.aborted)
-    return all
-  }
-
   async function refreshAreasAndMetrics(signal?: AbortSignal) {
     try {
       const [allFarms, metricsRes] = await Promise.all([
-        fetchAllActivePages<FarmView>('/api/v1/farms', signal),
+        areaLoader.current.loadActiveFarms(signal),
         requestJson<{ items: MetricDef[] }>('/api/v1/metrics', { signal }),
       ])
       if (!mounted.current || signal?.aborted) return
@@ -133,22 +119,19 @@ function Devices({ csrf }: { csrf: string }) {
   }, [])
 
   function handleFarmChange(nextFarmId: string) {
-    zoneGen.current++
-    setSelectedFarmId(nextFarmId)
-    setZones([])
-    setZone('')
-    if (!nextFarmId) return
-    const activeZoneGen = zoneGen.current
-    void fetchAllActivePages<ZoneView>(`/api/v1/farms/${nextFarmId}/zones`)
-      .then(allZones => {
-        if (!mounted.current || activeZoneGen !== zoneGen.current) return
-        setZones(allZones)
-      })
-      .catch(() => {
-        if (mounted.current && activeZoneGen === zoneGen.current) {
-          setMessage('Không tải được Zone thuộc Farm đã chọn.')
-        }
-      })
+    void areaLoader.current.selectFarm(nextFarmId, {
+      onReset: farmId => {
+        setSelectedFarmId(farmId)
+        setZones([])
+        setZone('')
+      },
+      onLoaded: allZones => {
+        if (mounted.current) setZones(allZones)
+      },
+      onError: () => {
+        if (mounted.current) setMessage('Không tải được Zone thuộc Farm đã chọn.')
+      },
+    })
   }
 
   useEffect(() => {

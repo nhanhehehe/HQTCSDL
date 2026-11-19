@@ -4,18 +4,29 @@ import test from 'node:test'
 import ts from 'typescript'
 
 const clientSource = await readFile(new URL('../src/api/client.ts', import.meta.url), 'utf8')
-const compiledClient = ts.transpileModule(clientSource, {
-  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
-}).outputText
+const loaderSource = await readFile(
+  new URL('../src/features/areas/loader.ts', import.meta.url),
+  'utf8',
+)
 
-async function loadClient() {
-  return import(
-    `data:text/javascript;base64,${Buffer.from(compiledClient + `\n//${Math.random()}`).toString('base64')}`
+function moduleUrl(source) {
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
+  }).outputText
+  return `data:text/javascript;base64,${Buffer.from(compiled + `\n//${Math.random()}`).toString('base64')}`
+}
+
+async function loadModules() {
+  const clientUrl = moduleUrl(clientSource)
+  const client = await import(clientUrl)
+  const loader = await import(
+    moduleUrl(loaderSource.replace("'../../api/client'", JSON.stringify(clientUrl)))
   )
+  return { ...client, ...loader }
 }
 
 test('G1 area archive 409 AREA_IN_USE and gateway credential issue/revoke contract', async () => {
-  const { requestJson } = await loadClient()
+  const { requestJson } = await loadModules()
   const realFetch = globalThis.fetch
   const calls = []
   try {
@@ -72,7 +83,7 @@ test('G1 area archive 409 AREA_IN_USE and gateway credential issue/revoke contra
 })
 
 test('401 on G1 metrics request triggers unauthorized callback and invalidates stale requests', async () => {
-  const { requestJson, invalidateRequests, onUnauthorized, StaleResponse } = await loadClient()
+  const { requestJson, invalidateRequests, onUnauthorized, StaleResponse } = await loadModules()
   const realFetch = globalThis.fetch
   let cleared = 0
   const unsub = onUnauthorized(() => {
@@ -100,6 +111,127 @@ test('401 on G1 metrics request triggers unauthorized callback and invalidates s
     await assert.rejects(pending, StaleResponse)
   } finally {
     unsub()
+    globalThis.fetch = realFetch
+  }
+})
+
+test('FarmZoneLoader follows multi-page Farm/Zone cursors and drops stale Zone responses on Farm switch', async () => {
+  const { FarmZoneLoader } = await loadModules()
+  const realFetch = globalThis.fetch
+  const loader = new FarmZoneLoader()
+  const urls = []
+
+  let resolveFarm1ZonePage1
+  const farm1ZonePage1Deferred = new Promise(resolve => {
+    resolveFarm1ZonePage1 = resolve
+  })
+
+  try {
+    globalThis.fetch = async (url, init = {}) => {
+      urls.push(url)
+      if (url === '/api/v1/farms?status=ACTIVE&page_size=10') {
+        return new Response(
+          JSON.stringify({
+            items: [{ id: '1', code: 'F-01', name: 'Farm 1' }],
+            next_cursor: 'cur-f-1',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url === '/api/v1/farms?status=ACTIVE&page_size=10&cursor=cur-f-1') {
+        return new Response(
+          JSON.stringify({
+            items: [{ id: '2', code: 'F-02', name: 'Farm 2' }],
+            next_cursor: null,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url === '/api/v1/farms/1/zones?status=ACTIVE&page_size=10') {
+        await farm1ZonePage1Deferred
+        if (init.signal?.aborted) {
+          throw new DOMException('Aborted', 'AbortError')
+        }
+        return new Response(
+          JSON.stringify({
+            items: [{ id: '11', farm_id: '1', code: 'Z-11', name: 'Zone 11' }],
+            next_cursor: 'cur-z-11',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url === '/api/v1/farms/2/zones?status=ACTIVE&page_size=10') {
+        return new Response(
+          JSON.stringify({
+            items: [{ id: '21', farm_id: '2', code: 'Z-21', name: 'Zone 21' }],
+            next_cursor: 'cur-z-21',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url === '/api/v1/farms/2/zones?status=ACTIVE&page_size=10&cursor=cur-z-21') {
+        return new Response(
+          JSON.stringify({
+            items: [{ id: '22', farm_id: '2', code: 'Z-22', name: 'Zone 22' }],
+            next_cursor: null,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      throw new Error(`Unexpected URL: ${url}`)
+    }
+
+    // 1. Multi-page Farm loading via next_cursor
+    const farms = await loader.loadActiveFarms()
+    assert.deepEqual(
+      farms.map(f => f.code),
+      ['F-01', 'F-02'],
+    )
+
+    // 2. Select Farm 1 (in-flight), then switch to Farm 2 before Farm 1 finishes
+    let selectedFarmId = ''
+    let zones = []
+    let selectedZoneId = 'old-zone'
+    const loadedHistory = []
+
+    const callbacks = {
+      onReset: farmId => {
+        selectedFarmId = farmId
+        zones = []
+        selectedZoneId = ''
+      },
+      onLoaded: nextZones => {
+        zones = nextZones
+        loadedHistory.push(nextZones.map(z => z.code))
+      },
+      onError: () => {
+        throw new Error('Should not report error for aborted Farm 1 request')
+      },
+    }
+
+    const p1 = loader.selectFarm('1', callbacks)
+    assert.equal(selectedFarmId, '1')
+    assert.equal(selectedZoneId, '')
+
+    const p2 = loader.selectFarm('2', callbacks)
+    assert.equal(selectedFarmId, '2')
+
+    // Let Farm 1's delayed page 1 resolve after switching to Farm 2
+    resolveFarm1ZonePage1()
+    await Promise.all([p1, p2])
+
+    // Farm 1's response must be dropped (and page 2 of Farm 1 never requested), while Farm 2's 2 pages load
+    assert.deepEqual(
+      zones.map(z => z.code),
+      ['Z-21', 'Z-22'],
+    )
+    assert.deepEqual(loadedHistory, [['Z-21', 'Z-22']])
+    assert.equal(
+      urls.includes('/api/v1/farms/1/zones?status=ACTIVE&page_size=10&cursor=cur-z-11'),
+      false,
+    )
+  } finally {
+    loader.dispose()
     globalThis.fetch = realFetch
   }
 })
