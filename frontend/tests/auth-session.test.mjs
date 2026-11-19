@@ -218,3 +218,54 @@ test('successful login and logout keep the existing JSON/CSRF guards and private
   assert.equal(auth.getSnapshot().session, null)
   assert.equal(auth.getSnapshot().uncertainLogout, false)
 })
+
+test('initialized stays false while initial verify is pending and turns true after 200, 401, or network failure', async t => {
+  const url = moduleUrl(clientSource)
+  await import(url)
+  const { AuthSession } = await import(moduleUrl(sessionSource.replace("'../../api/client'", JSON.stringify(url))))
+  const original = globalThis.fetch
+
+  try {
+    // 1. Pending -> 200 valid session
+    const d200 = deferred()
+    globalThis.fetch = () => d200.promise
+    const a200 = new AuthSession()
+    t.after(() => a200.stop())
+    a200.start()
+    assert.equal(a200.getSnapshot().initialized, false)
+    assert.equal(a200.getSnapshot().session, null)
+    d200.resolve(json(valid()))
+    await immediate()
+    assert.equal(a200.getSnapshot().initialized, true)
+    assert.equal(a200.canWrite(), true)
+
+    // 2. Pending -> 401 invalid session
+    const d401 = deferred()
+    globalThis.fetch = () => d401.promise
+    const a401 = new AuthSession()
+    t.after(() => a401.stop())
+    a401.start()
+    assert.equal(a401.getSnapshot().initialized, false)
+    d401.resolve(json({ error: { code: 'SESSION_INVALID' } }, 401))
+    await immediate()
+    assert.equal(a401.getSnapshot().initialized, true)
+    assert.equal(a401.getSnapshot().session, null)
+    assert.equal(a401.canWrite(), false)
+
+    // 3. Pending -> network error does NOT claim session expired
+    const dNet = deferred()
+    globalThis.fetch = () => dNet.promise
+    const aNet = new AuthSession()
+    t.after(() => aNet.stop())
+    aNet.start()
+    assert.equal(aNet.getSnapshot().initialized, false)
+    dNet.resolve(Promise.reject(new TypeError('offline')))
+    await immediate()
+    assert.equal(aNet.getSnapshot().initialized, true)
+    assert.equal(aNet.getSnapshot().session, null)
+    assert.match(aNet.getSnapshot().message, /Chưa xác minh được phiên/)
+    assert.doesNotMatch(aNet.getSnapshot().message, /hết hạn/)
+  } finally {
+    globalThis.fetch = original
+  }
+})

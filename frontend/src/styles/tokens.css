@@ -1,0 +1,59 @@
+:root {
+  /* Brand */
+  --color-primary: #28573e;
+  --color-primary-hover: #1e4430;
+  --color-primary-soft: #e6f0ea;
+
+  /* Surface & Neutrals */
+  --color-bg: #f4f7f3;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f8faf8;
+  --color-border: #dce6dc;
+  --color-border-strong: #7e9587;
+
+  /* Typography */
+  --color-text: #18362b;
+  --color-text-muted: #53665c;
+
+  /* Accessibility Focus */
+  --color-focus: #b58925;
+
+  /* Semantic Status (independent dimensions) */
+  --color-ok-fg: #1b5e3a;
+  --color-ok-bg: #e6f4ec;
+  --color-warn-fg: #8a5300;
+  --color-warn-bg: #fef3dc;
+  --color-err-fg: #a61b1b;
+  --color-err-bg: #fdeaea;
+  --color-neutral-fg: #475569;
+  --color-neutral-bg: #eef2f6;
+
+  /* Fonts */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Spacing scale (4px step) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Radii & Shadows */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px rgba(24, 54, 43, 0.06);
+  --shadow-lg: 0 12px 32px rgba(24, 54, 43, 0.16);
+
+  /* Layout Dimensions & Layers */
+  --sidebar-width: 240px;
+  --topbar-height: 56px;
+  --z-topbar: 20;
+  --z-sidebar: 30;
+  --z-backdrop: 40;
+  --z-drawer: 50;
+  --z-modal: 60;
+}

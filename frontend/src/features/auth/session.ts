@@ -2,13 +2,25 @@ import { ApiError, invalidateRequests, onUnauthorized, requestJson } from '../..
 
 export type Session = { admin: { id: string; username: string }; expires_at: string; csrf_token: string }
 type State = {
-  session: Session | null; busy: boolean; message: string; uncertainLogout: boolean; verified: boolean
+  initialized: boolean
+  session: Session | null
+  busy: boolean
+  message: string
+  uncertainLogout: boolean
+  verified: boolean
 }
 
 // The provider and mutation guards share this in-memory session lifecycle.
 // Node tests exercise its asynchronous transitions without a second auth provider.
 export class AuthSession {
-  private state: State = { session: null, busy: false, message: '', uncertainLogout: false, verified: false }
+  private state: State = {
+    initialized: false,
+    session: null,
+    busy: false,
+    message: '',
+    uncertainLogout: false,
+    verified: false,
+  }
   private listeners = new Set<() => void>()
   private revision = 0
   private operation = 0
@@ -45,7 +57,7 @@ export class AuthSession {
       this.clear()
     }
     clearTimeout(this.timer)
-    this.update({ session: value, verified: true, message: '' })
+    this.update({ initialized: true, session: value, verified: true, message: '' })
     this.timer = setTimeout(() => this.clear('Phiên đã hết hạn. Vui lòng đăng nhập lại.'), remaining)
   }
 
@@ -63,7 +75,7 @@ export class AuthSession {
     this.operation += 1
     this.operating = false
     this.clear()
-    this.update({ busy: false })
+    this.update({ initialized: false, busy: false })
   }
 
   private begin() {
@@ -77,7 +89,7 @@ export class AuthSession {
   private finish(active: number) {
     if (active === this.operation) {
       this.operating = false
-      this.update({ busy: false })
+      this.update({ initialized: true, busy: false })
     }
   }
 

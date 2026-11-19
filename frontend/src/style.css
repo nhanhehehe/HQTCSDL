@@ -1,18 +1,4 @@
-* { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, sans-serif; color: #18362b; background: #f4f7f3; }
-main { max-width: 840px; margin: 8vh auto; padding: 32px; }
-h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.2; }
-p { line-height: 1.6; }
-.eyebrow { font-size: .8rem; letter-spacing: .1em; font-weight: 700; color: #4c765d; }
-section { padding: 24px; background: white; border: 1px solid #dce6dc; border-radius: 12px; margin: 32px 0; }
-section h2 { margin-top: 0; font-size: 1.2rem; }
-small, aside { color: #53665c; line-height: 1.7; }
-form { display: grid; gap: 16px; max-width: 400px; }
-label { display: grid; gap: 8px; font-weight: 600; }
-input, button, select, textarea { font: inherit; border-radius: 6px; padding: 10px 14px; }
-input, select, textarea { border: 1px solid #7e9587; width: 100%; }
-textarea { min-height: 96px; resize: vertical; }
-button { border: 1px solid #28573e; background: #28573e; color: white; cursor: pointer; }
-button:disabled { opacity: .6; cursor: wait; }
-button.secondary { margin-top: 16px; color: #28573e; background: white; }
-input:focus-visible, button:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #b58925; outline-offset: 3px; }
+@import './styles/tokens.css';
+@import './styles/base.css';
+@import './styles/layout.css';
+@import './styles/components.css';
