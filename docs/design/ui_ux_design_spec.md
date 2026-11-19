@@ -1,11 +1,11 @@
 # Thiết kế Giao diện Tổng thể (UI/UX Design Spec) — HQTCSDL
 
 > [!NOTE]
-> **Phạm vi tài liệu (Bước 1 — Đã duyệt, chưa viết code):** Thiết kế khung giao diện tổng thể nhất quán cho toàn bộ hệ thống (G1 + G3 + G4) dựa trên source `develop@0c0975e` (Alembic head `fee0fa015af7`) và các trang Confluence mới nhất: `FL-01` (v10), `FL-02` (v6), `FL-03` (v11), `FL-04` (v11), `FL-07` (v12), `FL-08` (v9), `FL-09` (v7), `FL-10` (v9), `FL-11` (v8), `FL-12` (v9), `FL-13` (v7), `03.3` (v14), `03.4` (v28), `03.5.1` (v18), `03.6` (v19).
+> **Phạm vi tài liệu (Đã đồng bộ G3 — `G3-D01`–`G3-D06`):** Thiết kế khung giao diện tổng thể nhất quán cho toàn bộ hệ thống (G1 + G3 + G4) dựa trên `develop` sau PR #23 (Alembic head `fee0fa015af7`) và các trang Confluence: `FL-01` (v10), `FL-02` (v6), `FL-03` (v11), `FL-04` (v11), `FL-07` (v12), `FL-08` (v9), `FL-09` (v7), `FL-10` (v9), `FL-11` (v8), `FL-12` (v9), `FL-13` (v7), `03.3` (v14), `03.4` (v28), `03.5.1` (v18), `03.6` (v19).
 >
 > **Nguyên tắc bất biến (Kiến trúc FE vs Contract nghiệp vụ):**
 > 1. **Chốt bộ khung FE một lần và tái sử dụng xuyên suốt G3/G4**, nhưng **không để quyết định trình bày giao diện tự làm thay đổi contract nghiệp vụ, DTO, tham số API hay bất biến đã chốt**.
-> 2. **Ranh giới Bước 2:** Bước 2 chỉ dựng **App Shell** (`react-router-dom`, Design Tokens CSS thuần, Drawer/Modal dùng chung) và kết nối hoàn chỉnh **API thật của G1** (`FL-01`, `FL-02`, `FL-03`). Các màn hình **G3** và **G4** ở Bước 2 chỉ hiển thị `FeaturePlaceholder` trung thực — **tuyệt đối không dùng dữ liệu giả** để giả lập chức năng đã hoạt động.
+> 2. **Ranh giới theo giai đoạn:** G1 hoàn chỉnh App Shell + `FL-01`/`FL-02`/`FL-03`. G3 kích hoạt thật `FL-07`, `FL-12` (phần dữ liệu & freshness) và `FL-13` (báo cáo & CSV), còn phần **G4** (`FL-04`, `FL-08`–`FL-11`, `FL-12` cảnh báo/đối soát) và vẽ biểu đồ FE (`G3-D05` / `UI-D07`) giữ trạng thái trung thực — **tuyệt đối không dùng dữ liệu giả**.
 
 ---
 
@@ -28,19 +28,19 @@ flowchart LR
 
 ### 1.2. Phân nhóm menu & trạng thái sẵn sàng
 
-| Nhóm Sidebar | Mục điều hướng | Route đề xuất | Luồng nghiệp vụ | Giai đoạn | Trạng thái tại Bước 2 |
+| Nhóm Sidebar | Mục điều hướng | Route đề xuất | Luồng nghiệp vụ | Giai đoạn | Trạng thái tại G3 |
 | --- | --- | --- | --- | --- | --- |
-| **Vận hành** | Tổng quan | `/dashboard` | `FL-12` (Dashboard + Thông báo web) | G3 (dữ liệu) + G4 (cảnh báo) | Khung chờ (G3/G4) |
-| **Vận hành** | Dữ liệu đo | `/measurements` | `FL-07` (Hiện tại, Lịch sử Known/Unknown, Biểu đồ) | G3 | Khung chờ (G3) |
+| **Vận hành** | Tổng quan | `/dashboard` | `FL-12` (Dashboard + Thông báo web) | G3 (dữ liệu) + G4 (cảnh báo) | **G3 hoạt động thật** (cảnh báo chờ G4) |
+| **Vận hành** | Dữ liệu đo | `/measurements` | `FL-07` (Hiện tại, Lịch sử Known/Unknown, Biểu đồ) | G3 | **Hoạt động thật (API G3; chart FE hoãn sau G3/G4)** |
 | **Vận hành** | Cảnh báo | `/alerts` | `FL-11` (Active/History, Audit, Ack) | G4 | Khung chờ (G4) |
-| **Vận hành** | Báo cáo | `/reports` | `FL-13` (Thống kê 5 đại lượng & Export CSV) | G3 | Khung chờ (G3) |
+| **Vận hành** | Báo cáo | `/reports` | `FL-13` (Thống kê 5 đại lượng & Export CSV) | G3 | **Hoạt động thật (API G3)** |
 | **Cấu hình & Quản trị** | Giám sát & Ngưỡng | `/monitoring` | `FL-08` (Ngưỡng/Enable/T), `FL-04` (Quyền tiếp nhận) | G4 | Khung chờ (G4) |
 | **Cấu hình & Quản trị** | Farm & Zone | `/areas` | `FL-02` (Vòng đời Farm/Zone) | **G1** | **Hoạt động thật (API G1)** |
 | **Cấu hình & Quản trị** | Thiết bị & Khóa | `/devices` | `FL-03` (Node, Gateway, Credentials, 5 Metrics) | **G1** | **Hoạt động thật (API G1)** |
 | **Hệ thống (Footer/Topbar)** | Phiên quản trị & Health | Modal / Drawer / Topbar | `FL-01` + `/health/live` | **G1** | **Hoạt động thật (API G1)** |
 
 > [!IMPORTANT]
-> **Ranh giới hiển thị khi chưa đăng nhập (`FL-01`):** Khi chưa có phiên `ADMIN` hợp lệ (hoặc sau khi nhận `401 SESSION_INVALID` / hết hạn phiên), App Shell ẩn toàn bộ menu và dữ liệu riêng, chỉ hiển thị màn hình **Đăng nhập** kèm trạng thái kết nối tối thiểu (`/health/live` — ghi rõ chỉ kiểm tra tiến trình API). Trang mặc định sau khi đăng nhập ở Bước 2 đã chốt là `/areas` (`UI-D01`, sẽ chuyển về `/dashboard` khi G3 hoàn thành).
+> **Ranh giới hiển thị khi chưa đăng nhập (`FL-01`):** Khi chưa có phiên `ADMIN` hợp lệ (hoặc sau khi nhận `401 SESSION_INVALID` / hết hạn phiên), App Shell ẩn toàn bộ menu và dữ liệu riêng, chỉ hiển thị màn hình **Đăng nhập** kèm trạng thái kết nối tối thiểu (`/health/live` — ghi rõ chỉ kiểm tra tiến trình API). Trang mặc định sau khi đăng nhập ở Bước 2 là `/areas` và chuyển sang **`/dashboard`** ở G3 (`UI-D01` / `G3-D06`).
 
 ---
 
@@ -222,7 +222,9 @@ Kế thừa bảng màu nông nghiệp hiện có trong [style.css](../../fronte
 +------------------------------------------------------------------------------+
 ```
 
-- **Quy tắc bắt buộc trên Dashboard (`FL-12`):**
+- **Quy tắc bắt buộc trên Dashboard (`FL-12` + `G3-D01`/`G3-D02`):**
+  - Toàn bộ màn hình dùng `GET /api/v1/dashboard?farm_id=<id>` (`farm_id` bắt buộc; không có `zone_id` ở MVP; Farm/Zone đã lưu trữ trả `200` kèm `scope.farm.archived_at` và `profile.zone.archived_at`).
+  - Tại G3 (`capabilities = { monitoring: false, alerts: false }`): các trường G4 (`active_count`, `monitoring`, `evaluation`, `active_alerts`) trả **`null`** — FE hiển thị rõ *"Chờ G4"*, **tuyệt đối không giả `"0"`, `[]` hoặc `UP_TO_DATE`**.
   - **Không hiển thị** `last_new_persisted_at`, `backend_received_at`, credential, SD/queue, hoặc suy luận "Online/Offline" / "Bình thường".
   - Nếu `current.state = NO_DATA` hoặc `NO_EVENT_TIME`, phân biệt rõ 2 trạng thái và có link mở trực tiếp nhóm `UNKNOWN` ở màn hình Dữ liệu đo (`FL-07`).
   - Tự động poll mỗi `5000ms` (timeout `4000ms`), single-flight, dừng khi tab ẩn, gọi ngay khi quay lại tab/reconnect.
@@ -332,10 +334,12 @@ Tổ chức lại [DevicesPanel.tsx](../../frontend/src/features/devices/Devices
 +------------------------------------------------------------------------------+
 ```
 
-- **Thao tác & ràng buộc `FL-07`:**
+- **Thao tác & ràng buộc `FL-07` (`G3-D03`, `G3-D05`):**
+  - Các endpoint `/api/v1/nodes/{id}/measurements/current`, `/api/v1/nodes/{id}/measurements` và `/api/v1/nodes/{id}/measurements/chart` không nhận `farm_id` (xác định Farm qua FK, cho phép đọc Farm/Zone đã lưu trữ).
   - `GET /api/v1/nodes/{id}/measurements/current` tách biệt khỏi bộ lọc `from/to` của lịch sử.
   - Chọn `time_mode=unknown` sẽ ẩn bộ lọc `from/to` và tab Biểu đồ; hiển thị các bản ghi thiếu giờ đo bằng đúng trường định danh/metadata mà không bịa giờ đo từ giờ nhận.
   - Bảng lịch sử và Biểu đồ dùng chung `view_token` cho cùng `(node_id, from, to)`; đổi Node hoặc `from/to` lập tức vô hiệu `view_token`/`cursor` và hủy request cũ.
+  - **G3 vs sau G3/G4 (`G3-D05`):** Backend triển khai và kiểm chứng đầy đủ `GET /api/v1/nodes/{id}/measurements/chart` + shared `view_token` ngay trong G3; tab Biểu đồ ở FE hiển thị thông báo hoãn chọn thư viện & vẽ biểu đồ tới sau khi xong G3 và G4 (không dựng biểu đồ giả).
 
 ---
 
@@ -463,7 +467,7 @@ Tổ chức lại [DevicesPanel.tsx](../../frontend/src/features/devices/Devices
 
 ## 5. Mapping Chức năng → API → Giai đoạn (G1 / G3 / G4)
 
-| Màn hình | Chức năng UI | API Endpoint | Luồng | Giai đoạn | Trạng thái trên `develop@0c0975e` |
+| Màn hình | Chức năng UI | API Endpoint | Luồng | Giai đoạn | Trạng thái trên `feat/25-g3-query-display-reports` |
 | --- | --- | --- | --- | --- | --- |
 | **App Shell / Login** | Kiểm tra API sống | `GET /health/live` | Foundation | G0/G1 | **Đã có API thật** |
 | **Login / Topbar** | Đăng nhập, kiểm tra phiên, đăng xuất | `POST /api/v1/auth/login`<br>`GET /api/v1/auth/session`<br>`POST /api/v1/auth/logout` | `FL-01` | G1 | **Đã có API thật** |
@@ -474,9 +478,9 @@ Tổ chức lại [DevicesPanel.tsx](../../frontend/src/features/devices/Devices
 | **Thiết bị** | Quản lý API Key Gateway (show-once, revoke) | `GET/POST /api/v1/gateways/{id}/credentials`<br>`GET /api/v1/gateways/{id}/credentials/{cid}`<br>`POST /api/v1/gateways/{id}/credentials/{cid}/revoke` | `FL-03` | G1 | **Đã có API thật** |
 | **Thiết bị** | Danh mục 5 đại lượng chuẩn (chỉ đọc) | `GET /api/v1/metrics` | `FL-03` | G1 | **Đã có API thật** |
 | *(Backend IoT — không phải UI web)* | Gateway gửi batch bản đo & nhận ACK2 | `POST /api/v1/ingestion/measurements` | `FL-06` | G2 | **Đã có API thật** (PR #21) |
-| **Dữ liệu đo** | Số đo hiện tại, lịch sử (Known/Unknown), biểu đồ | `GET /api/v1/nodes/{id}/measurements/current`<br>`GET /api/v1/nodes/{id}/measurements`<br>`GET /api/v1/nodes/{id}/measurements/chart` | `FL-07` | **G3** | *Chưa triển khai* |
-| **Tổng quan** | Dashboard tổng hợp toàn Farm (phần số đo & freshness) | `GET /api/v1/dashboard` | `FL-12` | **G3** (dữ liệu) | *Chưa triển khai* |
-| **Báo cáo** | Tạo snapshot thống kê 5 đại lượng & xuất CSV | `POST /api/v1/reports/measurements`<br>`POST /api/v1/reports/measurements/csv` | `FL-13` | **G3** | *Chưa triển khai* |
+| **Dữ liệu đo** | Số đo hiện tại, lịch sử (Known/Unknown), biểu đồ | `GET /api/v1/nodes/{id}/measurements/current`<br>`GET /api/v1/nodes/{id}/measurements`<br>`GET /api/v1/nodes/{id}/measurements/chart` | `FL-07` | **G3** | **Triển khai G3** (BE full + FE current/history; FE chart hoãn sau G3/G4) |
+| **Tổng quan** | Dashboard tổng hợp toàn Farm (phần số đo & freshness) | `GET /api/v1/dashboard?farm_id=<id>[&node_id=<id>]` | `FL-12` | **G3** (dữ liệu) | **Triển khai G3** (`capabilities` + `null` G4 fields) |
+| **Báo cáo** | Tạo snapshot thống kê 5 đại lượng & xuất CSV | `POST /api/v1/reports/measurements`<br>`POST /api/v1/reports/measurements/csv` | `FL-13` | **G3** | **Triển khai G3** |
 | **Giám sát & Thiết bị** | Bật/tắt quyền Backend tiếp nhận mới (Node/Gateway) | `PATCH /api/v1/nodes/{id}/receiving`<br>`PATCH /api/v1/gateways/{id}/receiving` | `FL-04` | **G4** | *Chưa triển khai* |
 | **Giám sát** | Xem & cập nhật ngưỡng 5 metric, enable, timeout `T` | `GET /api/v1/nodes/{id}/monitoring`<br>`PATCH /api/v1/nodes/{id}/monitoring` | `FL-08` | **G4** | *Chưa triển khai* |
 | *(Worker nền — không API FE)* | Engine đánh giá ngưỡng/replay & timeout Node | Worker nội bộ (không có endpoint web) | `FL-09`, `FL-10` | **G4** | *Chưa triển khai* |
@@ -530,31 +534,26 @@ Tất cả 7 quyết định dưới đây đã được duyệt và chốt làm
 
 | Mã | Chủ đề | Quyết định đã chốt | Ràng buộc thực thi |
 | --- | --- | --- | --- |
-| **`UI-D01`** | **Trang mặc định sau đăng nhập ở Bước 2** | **`/areas`** mặc định ở Bước 2 (chuyển về `/dashboard` khi G3 sẵn sàng). | Redirect `/` → `/areas` khi đã đăng nhập; khi chưa đăng nhập luôn về `/login`. |
+| **`UI-D01`** | **Trang mặc định sau đăng nhập** | **`/areas` ở Bước 2 → chuyển sang `/dashboard` ở G3** (`G3-D06`). | Redirect `/` → `/dashboard` khi đã đăng nhập ở G3 (sau khi Dashboard G3 nối API thật); khi chưa đăng nhập luôn về `/login`. |
 | **`UI-D02`** | **Cơ chế định tuyến (Routing)** | Dùng **`react-router-dom`** (`BrowserRouter`), không tự viết router. | Cập nhật đồng bộ `frontend/package.json` và `frontend/package-lock.json`; tận dụng SPA fallback đã có sẵn trong [main.py](../../backend/app/main.py) và [vite.config.ts](../../frontend/vite.config.ts) (không sửa Backend). |
 | **`UI-D03`** | **Chiến lược CSS / Styling** | **CSS thuần + Design Tokens** (`frontend/src/styles/`). | Không cài Tailwind/UI framework ngoài; giữ `focus-visible` và độ tương phản `WCAG AA`. |
 | **`UI-D04`** | **Vị trí bộ chọn `Farm` dùng chung** | **Farm selector trên Topbar** cho các trang Vận hành (`/dashboard`, `/measurements`, `/alerts`, `/reports`, `/monitoring`); trang **Farm & Zone (`/areas`) độc lập**. | Tải Farm từ `GET /api/v1/farms` (theo dõi đủ `next_cursor`), **không tự chọn Farm đầu tiên**, đổi Farm phải hủy request cũ và reset state; không tự gửi tham số trái contract API. |
 | **`UI-D05`** | **Form Tạo/Sửa và Hộp thoại Xác nhận / Show-Once** | **Drawer** cho mọi form Tạo/Sửa; **Modal** cho Confirm (Archive/Restore/Revoke) và **API Key Show-Once**. | Drawer giữ nguyên dữ liệu form khi `409 VERSION_CONFLICT` hoặc mất phản hồi; Show-Once Modal xóa `api_key` khỏi memory ngay khi đóng/đổi tab/logout. |
-| **`UI-D06`** | **Hiển thị mục G3/G4 trên Sidebar ở Bước 2** | **Hiển thị đầy đủ** với `FeaturePlaceholder` trung thực (gắn nhãn `G3` / `G4`). | Nêu rõ phạm vi & API dự kiến; tuyệt đối không dựng số liệu/biểu đồ/cảnh báo giả. |
-| **`UI-D07`** | **Thư viện biểu đồ cho G3 (`FL-07`)** | **Chọn và cài khi sang G3** (chưa cài ở Bước 2). | Yêu cầu khi chọn ở G3: không tự downsample, ngắt nét đúng tại điểm `null`, hiển thị cờ đang tải khi chưa hết `next_cursor`. |
+| **`UI-D06`** | **Hiển thị mục chưa hoàn tất trên Sidebar** | **Hiển thị đầy đủ** với `FeaturePlaceholder` trung thực (gắn nhãn `G4` cho phần chưa có API). | Nêu rõ phạm vi & API dự kiến; tuyệt đối không dựng số liệu/biểu đồ/cảnh báo giả. |
+| **`UI-D07`** | **Thư viện biểu đồ cho `FL-07`** | **Backend `/measurements/chart` + `view_token` làm ở G3; chọn thư viện & vẽ biểu đồ FE hoãn sau G3 và G4** (`G3-D05`). | Khi vẽ biểu đồ sau G3/G4: không tự downsample, ngắt nét đúng tại điểm `null`, hiển thị cờ đang tải khi chưa hết `next_cursor`. |
 
 ---
 
-## 9. Ghi nhận Mâu thuẫn Hợp đồng Cần Xử lý Trước Khi Code G3 (`FL-12` `farm_id`)
+## 9. Các Quyết định Hợp đồng G3 Đã Chốt (`G3-D01`–`G3-D06`)
 
-> [!WARNING]
-> **Cổng chặn (Contract Gate) trước khi triển khai Dashboard G3 — Không thuộc phạm vi sửa đổi ở Bước 2:**
->
-> Khi đối chiếu trực tiếp `FL-12` (v9) và `03.5.1` (v18) trên Confluence, tồn tại một **mâu thuẫn nội bộ về tham số `farm_id` của `GET /api/v1/dashboard`** giữa phần thiết kế cũ (theo `area_manifest` 1 Farm) và phần bổ sung khu vực động ngày `18/11/2026`:
->
-> - **Tại `FL-12` §4 (và `03.5.1` §8):**
->   `GET /api/v1/dashboard` *"chỉ nhận `node_id` tùy chọn... không nhận `from/to`, `cursor`, `source/farm` tùy ý từ client"*; ngữ cảnh farm lấy từ cấu hình backend.
-> - **Tại `FL-12` mục `Chọn phạm vi Farm/Zone từ DB — 18/11/2026` (và tương tự cuối `FL-07`, `FL-11`, `FL-13`):**
->   *"Admin chọn Farm rõ ràng rồi Zone/Node thuộc Farm đó từ API FL-02; không lấy Farm đầu tiên hoặc manifest... Dashboard/báo cáo tổng hợp cần `farm_id` bắt buộc; `zone_id` nếu có phải thuộc `farm_id`, Node nếu chọn phải thuộc Zone/Farm. Parameter thiếu hoặc chéo quan hệ `400 INPUT_INVALID`; đối tượng không có `404 NOT_FOUND`."*
->
-> **Hướng xử lý bắt buộc:**
-> 1. **Ở Bước 2:** Không chạm Backend, không gọi `/api/v1/dashboard`; Topbar Farm selector chỉ là bộ chọn ngữ cảnh phía FE từ `GET /api/v1/farms` cho khung chờ G3/G4 và **không tự định nghĩa contract cho `/api/v1/dashboard`**.
-> 2. **Trước khi bắt đầu lập trình Dashboard G3 (`FL-12`) và Báo cáo G3 (`FL-13`):** Cần đối chiếu và chốt một bản hợp đồng duy nhất (cập nhật đồng bộ `FL-12 §4`, `FL-13 §4`, `03.5.1 §8` hoặc ghi rõ quyết định G3 đã được duyệt):
->    - Xác nhận chính thức chữ ký `GET /api/v1/dashboard?farm_id=<id>[&zone_id=<id>][&node_id=<id>]` (hay `farm_id` bắt buộc + `node_id` tùy chọn, giữ nguyên quy tắc màn hình chính fetch toàn Farm để không lọc mất thông báo của các Node khác).
->    - Xác nhận rõ cách xử lý khi Farm được chọn đang ở trạng thái `ARCHIVED` (cho xem lịch sử/dữ liệu đã lưu theo mục 18/11/2026).
->    - Xác nhận `POST /api/v1/reports/measurements` tiếp tục nhận `{node_id, from?, to?}` (suy Farm/Zone từ FK trong SQL) hay yêu cầu gửi kèm `farm_id` để kiểm chéo quan hệ.
+> [!NOTE]
+> **Contract Gate trước G3 đã được đối chiếu và chốt chính thức:** Không mở migration CSDL mới (giữ Alembic head `fee0fa015af7`, không thêm bảng `Report` hay cột `freshness`). Các quy ước hợp đồng áp dụng thống nhất cho G3 như sau:
+
+| Mã | Chủ đề | Quyết định đã chốt |
+| --- | --- | --- |
+| **`G3-D01`** | **Phạm vi Dashboard (`FL-12`)** | `GET /api/v1/dashboard?farm_id=<id>[&node_id=<id>]` (`farm_id` bắt buộc; **không dùng `zone_id`** ở MVP để giữ `scope.kind = FARM \| NODE`). Thiếu/sai định dạng tham số hoặc `node_id` khác Farm trả `400 INPUT_INVALID`; thiếu Farm/Node trả `404 NOT_FOUND`. Farm/Zone đã lưu trữ vẫn trả `200` kèm `scope.farm.archived_at` và `profile.zone.archived_at` trong cùng `SNAPSHOT`. |
+| **`G3-D02`** | **DTO Dashboard tại G3** | Giữ đủ key của `DashboardView` + thêm `capabilities: { monitoring: false, alerts: false }` tại root; toàn bộ field G4 (`active_count`, `monitoring`, `evaluation`, `active_alerts`) trả **`null`** (tuyệt đối không giả `"0"`, `[]` hay `UP_TO_DATE`). |
+| **`G3-D03`** | **Báo cáo (`FL-13`) & Lịch sử Node (`FL-07`)** | `POST /api/v1/reports/measurements` giữ body strict `{ node_id, from?, to? }` (suy Farm/Zone từ FK SQL; `/csv` giữ `{ snapshot_token }`). Bộ API `/api/v1/nodes/{id}/measurements*` không nhận `farm_id`. Cho phép đọc dữ liệu lịch sử của Farm/Zone đã lưu trữ. |
+| **`G3-D04`** | **Cấu hình Backend G3** | Tái sử dụng `HQ_CURSOR_SECRET`, `HQ_DATASET_GENERATION`, `HQ_ENV`; bổ sung `HQ_REPORT_SECRET` (`>= 32` UTF-8 bytes, tách biệt CSRF/cursor secret, thiếu khi gọi báo cáo trả `503`), `HQ_REPORT_SNAPSHOT_TTL_SECONDS=900` (`> 0`), và `HQ_NODE_TIME_PROFILES` (JSON map theo `device_id`, mặc định `{}`, thiếu profile trả `PROFILE_MISSING`). |
+| **`G3-D05`** | **Biểu đồ `FL-07` (`UI-D07`)** | Backend triển khai và kiểm chứng `GET /api/v1/nodes/{id}/measurements/chart` + shared `view_token` trong G3; lựa chọn thư viện và render biểu đồ phía Frontend hoãn đến sau khi xong G3 và G4 (tab Biểu đồ hiển thị thông báo trung thực, không vẽ giả). |
+| **`G3-D06`** | **Nhánh làm việc & route mặc định** | Triển khai trọn gói G3 trên 1 nhánh (`feat/25-g3-query-display-reports`) với các commit gọn theo thành phần và 1 PR vào `develop`; chuyển `DEFAULT_AUTHENTICATED_ROUTE` từ `/areas` sang `/dashboard` khi Dashboard G3 nối API thật. |
