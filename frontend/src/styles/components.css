@@ -158,11 +158,18 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex: 0 1 320px;
-  min-width: 200px;
+  flex: 0 1 360px;
+  min-width: 220px;
+}
+
+.topbar-farm select {
+  width: auto;
+  flex: 1;
+  min-width: 140px;
 }
 
 .topbar-farm-label {
+  display: inline;
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--color-text-muted);

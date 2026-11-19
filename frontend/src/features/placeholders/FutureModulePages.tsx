@@ -1,9 +1,55 @@
-import type { ReactNode } from 'react'
 import { useParams } from 'react-router-dom'
+import { useOptionalOperationalFarm } from '../../app/OperationalFarmContext'
 import { FeaturePlaceholder } from '../../components/FeaturePlaceholder'
 import { PageHeader } from '../../components/PageHeader'
+import { StatusBadge } from '../../components/StatusBadge'
 
-export function DashboardPlaceholderPage({ contextSlot }: { contextSlot?: ReactNode }) {
+function OperationalFarmContextNotice() {
+  const farmCtx = useOptionalOperationalFarm()
+  if (!farmCtx) return null
+
+  if (farmCtx.error) {
+    return (
+      <div className="banner banner-err" role="alert">
+        <span>Lỗi tải ngữ cảnh Farm từ Backend: {farmCtx.error}</span>
+      </div>
+    )
+  }
+
+  if (!farmCtx.selectedFarm) {
+    return (
+      <div className="banner banner-warn" role="status">
+        <span>
+          Chưa chọn Farm vận hành. Vui lòng chọn tường minh một Farm từ bộ chọn trên Topbar (hệ
+          thống không tự chọn Farm đầu tiên).
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card stack-sm" role="region" aria-label="Ngữ cảnh Farm đang chọn">
+      <div className="row-between">
+        <div className="row">
+          <strong>Ngữ cảnh Farm đang chọn:</strong>
+          <span className="mono">{farmCtx.selectedFarm.code}</span>
+          <span>{farmCtx.selectedFarm.name}</span>
+          <StatusBadge
+            tone={farmCtx.selectedFarm.archived_at ? 'neutral' : 'ok'}
+            label={farmCtx.selectedFarm.archived_at ? 'Đã lưu trữ' : 'Đang hoạt động'}
+          />
+        </div>
+        <small className="tabular mono">contextGeneration={farmCtx.contextGeneration}</small>
+      </div>
+      <small>
+        Khi triển khai G3/G4, thay đổi Farm trên Topbar sẽ tăng contextGeneration để reset
+        cursor/view và hủy mọi phản hồi API cũ.
+      </small>
+    </div>
+  )
+}
+
+export function DashboardPlaceholderPage() {
   return (
     <div className="stack">
       <PageHeader
@@ -20,13 +66,13 @@ export function DashboardPlaceholderPage({ contextSlot }: { contextSlot?: ReactN
           'Cổng chặn trước khi code Dashboard G3: cần đối chiếu và chốt hợp đồng tham số farm_id bắt buộc của GET /api/v1/dashboard giữa FL-12 §4 cũ và phần bổ sung ngày 18/11/2026.',
           'Không hiển thị số 0 giả cho cảnh báo ở G3 trước khi có G4; không hiển thị last_new_persisted_at hoặc backend_received_at trên Dashboard.',
         ]}
-        contextSlot={contextSlot}
+        contextSlot={<OperationalFarmContextNotice />}
       />
     </div>
   )
 }
 
-export function MeasurementsPlaceholderPage({ contextSlot }: { contextSlot?: ReactNode }) {
+export function MeasurementsPlaceholderPage() {
   return (
     <div className="stack">
       <PageHeader
@@ -46,13 +92,13 @@ export function MeasurementsPlaceholderPage({ contextSlot }: { contextSlot?: Rea
         contractNotes={[
           'Thư viện biểu đồ sẽ được chọn và cài ở bước G3 (UI-D07), bảo đảm không tự downsample và ngắt nét tại giá trị null.',
         ]}
-        contextSlot={contextSlot}
+        contextSlot={<OperationalFarmContextNotice />}
       />
     </div>
   )
 }
 
-export function ReportsPlaceholderPage({ contextSlot }: { contextSlot?: ReactNode }) {
+export function ReportsPlaceholderPage() {
   return (
     <div className="stack">
       <PageHeader
@@ -71,13 +117,13 @@ export function ReportsPlaceholderPage({ contextSlot }: { contextSlot?: ReactNod
         contractNotes={[
           'Tách biệt Draft State và Result Snapshot; sửa bộ lọc sẽ khóa nút Xuất CSV cho tới khi Tạo báo cáo mới thành công.',
         ]}
-        contextSlot={contextSlot}
+        contextSlot={<OperationalFarmContextNotice />}
       />
     </div>
   )
 }
 
-export function MonitoringPlaceholderPage({ contextSlot }: { contextSlot?: ReactNode }) {
+export function MonitoringPlaceholderPage() {
   return (
     <div className="stack">
       <PageHeader
@@ -95,13 +141,13 @@ export function MonitoringPlaceholderPage({ contextSlot }: { contextSlot?: React
           'GET /api/v1/nodes/{id}/monitoring',
           'PATCH /api/v1/nodes/{id}/monitoring',
         ]}
-        contextSlot={contextSlot}
+        contextSlot={<OperationalFarmContextNotice />}
       />
     </div>
   )
 }
 
-export function AlertsPlaceholderPage({ contextSlot }: { contextSlot?: ReactNode }) {
+export function AlertsPlaceholderPage() {
   return (
     <div className="stack">
       <PageHeader
@@ -114,13 +160,13 @@ export function AlertsPlaceholderPage({ contextSlot }: { contextSlot?: ReactNode
         flows="FL-09, FL-10, FL-11"
         scopeSummary="Hiển thị danh sách cảnh báo THRESHOLD và TIMEOUT phân trang theo cursor, lọc theo vòng đời/ghi nhận/phục hồi tự nhiên và truy cập màn hình chi tiết audit."
         plannedApis={['GET /api/v1/alerts']}
-        contextSlot={contextSlot}
+        contextSlot={<OperationalFarmContextNotice />}
       />
     </div>
   )
 }
 
-export function AlertDetailPlaceholderPage({ contextSlot }: { contextSlot?: ReactNode }) {
+export function AlertDetailPlaceholderPage() {
   const { id } = useParams()
   return (
     <div className="stack">
@@ -137,7 +183,7 @@ export function AlertDetailPlaceholderPage({ contextSlot }: { contextSlot?: Reac
           'GET /api/v1/alerts/{id}?audit_kind=revisions|acknowledgements|replacements',
           'POST /api/v1/alerts/{id}/acknowledgements',
         ]}
-        contextSlot={contextSlot}
+        contextSlot={<OperationalFarmContextNotice />}
       />
     </div>
   )
