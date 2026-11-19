@@ -261,6 +261,7 @@ def web_session_transaction(
     require_csrf: bool | None = None,
     lock_session: bool | None = None,
     isolation: str | None = None,
+    propagate_deadlock: bool = False,
 ):
     """Open an authenticated SQL transaction and yield (session, auth_context)."""
     digest = token_hash(cookie)
@@ -277,7 +278,7 @@ def web_session_transaction(
             connection.begin(),
             Session(bind=connection) as session,
         ):
-            if write or session_locked:
+            if write or session_locked or iso == "READ COMMITTED":
                 session.execute(text("SET XACT_ABORT ON"))
             auth_row = auth_repo.session_guard(session, digest, lock=session_locked)
             if auth_row is None:
@@ -288,7 +289,9 @@ def web_session_transaction(
             ):
                 fail(403, "CSRF_INVALID")
             yield session, {**dict(auth_row), "token_digest": digest}
-    except SQLAlchemyError:
+    except SQLAlchemyError as exc:
+        if propagate_deadlock and "1205" in str(getattr(exc, "orig", "")):
+            raise
         raise storage_error() from None
 
 

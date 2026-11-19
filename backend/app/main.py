@@ -29,6 +29,8 @@ from app.modules.devices.router import router as devices_router
 from app.modules.devices.service import DeviceService
 from app.modules.ingestion.router import router as ingestion_router
 from app.modules.ingestion.service import IngestionService
+from app.modules.measurements.router import router as measurements_router
+from app.modules.measurements.service import MeasurementsService
 
 logger = logging.getLogger("uvicorn.error.hqtcsdl")
 
@@ -50,6 +52,7 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
     app.state.areas = AreaService(database, settings)
     app.state.devices = DeviceService(database, settings)
     app.state.ingestion = IngestionService(database, settings)
+    app.state.measurements = MeasurementsService(database, settings)
     app.add_exception_handler(WebError, web_error)
     app.add_exception_handler(IngestionError, ingestion_error)
     app.add_exception_handler(StarletteHTTPException, http_error)
@@ -107,6 +110,7 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
     app.include_router(areas_router)
     app.include_router(devices_router)
     app.include_router(ingestion_router)
+    app.include_router(measurements_router)
 
     @app.api_route(
         "/{path:path}",
