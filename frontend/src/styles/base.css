@@ -196,18 +196,3 @@ a {
   outline: 3px solid var(--color-focus);
   outline-offset: 2px;
 }
-
-/* Preserved compatibility for legacy stacked panels until G1 presentation upgrade */
-.legacy-stack > section {
-  padding: var(--space-6);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  margin: var(--space-4) 0;
-}
-
-.legacy-stack form {
-  display: grid;
-  gap: var(--space-4);
-  max-width: 420px;
-}

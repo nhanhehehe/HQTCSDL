@@ -9,7 +9,7 @@ type DrawerProps = {
   busy?: boolean
   dirty?: boolean
   children: ReactNode
-  footer?: ReactNode
+  footer?: ReactNode | ((requestClose: () => void) => ReactNode)
 }
 
 export function Drawer({
@@ -104,7 +104,11 @@ export function Drawer({
           )}
           {children}
         </div>
-        {footer && <div className="dialog-footer">{footer}</div>}
+        {footer && (
+          <div className="dialog-footer">
+            {typeof footer === 'function' ? footer(requestClose) : footer}
+          </div>
+        )}
       </div>
     </div>
   )

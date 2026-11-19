@@ -22,22 +22,8 @@ function AuthenticatedRoutes() {
         <Routes>
           <Route path="/" element={<Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace />} />
           <Route path="/login" element={<Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace />} />
-          <Route
-            path="/areas"
-            element={
-              <div className="legacy-stack">
-                <AreasPanel />
-              </div>
-            }
-          />
-          <Route
-            path="/devices"
-            element={
-              <div className="legacy-stack">
-                <DevicesPanel />
-              </div>
-            }
-          />
+          <Route path="/areas" element={<AreasPanel />} />
+          <Route path="/devices" element={<DevicesPanel />} />
           <Route path="/dashboard" element={<DashboardPlaceholderPage />} />
           <Route path="/measurements" element={<MeasurementsPlaceholderPage />} />
           <Route path="/reports" element={<ReportsPlaceholderPage />} />
