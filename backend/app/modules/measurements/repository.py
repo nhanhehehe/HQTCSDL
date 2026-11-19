@@ -311,3 +311,104 @@ def count_node_existence_up_to_cap(session, *, node_id: int, cap: int) -> tuple[
         .one()
     )
     return int(row["total_count"]), int(row["known_count"])
+
+
+def get_farm_summary(session, farm_id: str) -> dict | None:
+    row = (
+        session.execute(
+            text("SELECT farm_id, farm_code, name, archived_at FROM dbo.Farm WHERE farm_id = :id"),
+            {"id": int(farm_id)},
+        )
+        .mappings()
+        .first()
+    )
+    return dict(row) if row is not None else None
+
+
+_DASHBOARD_NODE_SELECT = (
+    "SELECT n.node_id, n.device_code, n.name, n.receiving_enabled, "
+    "z.zone_id, z.farm_id, z.zone_code, z.name AS zone_name, z.archived_at AS zone_archived_at, "
+    "g.gateway_id, g.gateway_code, g.name AS gateway_name, "
+    "g.receiving_enabled AS gateway_receiving_enabled "
+    "FROM dbo.Node AS n "
+    "JOIN dbo.Zone AS z ON z.zone_id = n.zone_id "
+    "LEFT JOIN dbo.Gateway AS g ON g.gateway_id = n.gateway_id "
+)
+
+
+def get_dashboard_node(session, node_id: str) -> dict | None:
+    row = (
+        session.execute(
+            text(_DASHBOARD_NODE_SELECT + "WHERE n.node_id = :id"),
+            {"id": int(node_id)},
+        )
+        .mappings()
+        .first()
+    )
+    return dict(row) if row is not None else None
+
+
+def list_farm_dashboard_nodes(session, farm_id: str) -> list[dict]:
+    rows = (
+        session.execute(
+            text(_DASHBOARD_NODE_SELECT + "WHERE z.farm_id = :farm_id ORDER BY n.node_id ASC"),
+            {"farm_id": int(farm_id)},
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows]
+
+
+def load_latest_known_headers_for_nodes(session, node_ids: list[int]) -> dict[int, dict | None]:
+    if not node_ids:
+        return {}
+    result: dict[int, dict | None] = {int(nid): None for nid in node_ids}
+    unique_ids = list(result.keys())
+    for offset in range(0, len(unique_ids), _CHUNK_SIZE):
+        chunk = unique_ids[offset : offset + _CHUNK_SIZE]
+        params = {f"nid_{idx}": nid for idx, nid in enumerate(chunk)}
+        placeholders = ", ".join(f":nid_{idx}" for idx in range(len(chunk)))
+        rows = (
+            session.execute(
+                text(
+                    "SELECT n.node_id, "
+                    "m.measurement_id, m.boot_id, m.seq, m.t_node, m.time_status, "
+                    "m.recv_time, m.persisted_at "
+                    "FROM dbo.Node AS n "
+                    "OUTER APPLY ("
+                    "  SELECT TOP (1) x.measurement_id, x.boot_id, x.seq, x.t_node, "
+                    "  x.time_status, x.recv_time, x.persisted_at "
+                    "  FROM dbo.Measurement AS x "
+                    "  WHERE x.node_id = n.node_id AND x.t_node IS NOT NULL "
+                    "  ORDER BY x.t_node DESC, x.boot_id DESC, x.seq DESC"
+                    ") AS m "
+                    f"WHERE n.node_id IN ({placeholders})"
+                ),
+                params,
+            )
+            .mappings()
+            .all()
+        )
+        for row in rows:
+            nid = int(row["node_id"])
+            if row["measurement_id"] is not None:
+                result[nid] = dict(row)
+    return result
+
+
+def find_nodes_with_any_measurement(session, node_ids: list[int]) -> set[int]:
+    if not node_ids:
+        return set()
+    unique_ids = list(dict.fromkeys(int(nid) for nid in node_ids))
+    present: set[int] = set()
+    for offset in range(0, len(unique_ids), _CHUNK_SIZE):
+        chunk = unique_ids[offset : offset + _CHUNK_SIZE]
+        params = {f"nid_{idx}": nid for idx, nid in enumerate(chunk)}
+        placeholders = ", ".join(f":nid_{idx}" for idx in range(len(chunk)))
+        rows = session.execute(
+            text(f"SELECT DISTINCT node_id FROM dbo.Measurement WHERE node_id IN ({placeholders})"),
+            params,
+        ).scalars()
+        present.update(int(nid) for nid in rows)
+    return present

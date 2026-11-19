@@ -9,6 +9,22 @@ router = APIRouter(prefix="/api/v1", tags=["measurements"])
 _VALID_TIME_MODES = {"known", "unknown"}
 
 
+@router.get("/dashboard")
+def get_dashboard(request: Request):
+    check_request_shape(request, {"farm_id", "node_id"})
+    raw_farm_id = request.query_params.get("farm_id")
+    if raw_farm_id is None:
+        raise WebError(400, "INPUT_INVALID", "Thiếu farm_id")
+    farm_id = checked_value(identity, raw_farm_id)
+    raw_node_id = request.query_params.get("node_id")
+    node_id = checked_value(identity, raw_node_id) if raw_node_id is not None else None
+    return request.app.state.dashboard.get_dashboard(
+        request.cookies.get("hq_session"),
+        farm_id=farm_id,
+        node_id=node_id,
+    )
+
+
 @router.get("/nodes/{id}/measurements/current")
 def get_current_measurement(id: str, request: Request):
     check_request_shape(request, set())

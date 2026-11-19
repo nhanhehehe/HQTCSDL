@@ -29,6 +29,7 @@ from app.modules.devices.router import router as devices_router
 from app.modules.devices.service import DeviceService
 from app.modules.ingestion.router import router as ingestion_router
 from app.modules.ingestion.service import IngestionService
+from app.modules.measurements.dashboard_service import DashboardService
 from app.modules.measurements.router import router as measurements_router
 from app.modules.measurements.service import MeasurementsService
 
@@ -53,6 +54,7 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
     app.state.devices = DeviceService(database, settings)
     app.state.ingestion = IngestionService(database, settings)
     app.state.measurements = MeasurementsService(database, settings)
+    app.state.dashboard = DashboardService(database, settings)
     app.add_exception_handler(WebError, web_error)
     app.add_exception_handler(IngestionError, ingestion_error)
     app.add_exception_handler(StarletteHTTPException, http_error)
