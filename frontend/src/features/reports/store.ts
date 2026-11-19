@@ -1,6 +1,6 @@
 import { ApiError, StaleResponse, requestCsvBlob, requestJson } from '../../api/client'
 import type { CsvDownloadResult } from '../../api/client'
-import { defaultViRangeInputs, viDatetimeInputToIso } from '../measurements/format'
+import { viDatetimeInputToIso } from '../measurements/format'
 import { describeApiError, isAbortOrStale } from '../measurements/scopeLoader'
 import type { ReportView } from './types'
 
@@ -33,13 +33,12 @@ export class ReportsStore {
   private createCtrl: AbortController | null = null
   private exportCtrl: AbortController | null = null
 
-  constructor(nowMs?: number) {
-    const defaults = defaultViRangeInputs(nowMs)
+  constructor() {
     this.state = {
       draft: {
         nodeId: '',
-        fromInput: defaults.fromInput,
-        toInput: defaults.toInput,
+        fromInput: '',
+        toInput: '',
       },
       result: null,
       resultMatchesDraft: false,
@@ -118,22 +117,8 @@ export class ReportsStore {
     })
   }
 
-  applyDefault24h(nowMs?: number) {
-    const defaults = defaultViRangeInputs(nowMs)
-    this.emit({
-      draft: {
-        ...this.state.draft,
-        fromInput: defaults.fromInput,
-        toInput: defaults.toInput,
-      },
-      resultMatchesDraft: false,
-      error: '',
-      exportError: '',
-      exportSuccess: '',
-    })
-  }
-
-  clearRangeForServerDefault() {
+  applyDefault24h() {
+    if (this.state.draft.fromInput === '' && this.state.draft.toInput === '') return
     this.emit({
       draft: {
         ...this.state.draft,

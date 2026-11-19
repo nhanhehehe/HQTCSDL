@@ -1,5 +1,5 @@
 import { StaleResponse, getJson } from '../../api/client'
-import { defaultViRangeInputs, viDatetimeInputToIso } from './format'
+import { viDatetimeInputToIso } from './format'
 import { describeApiError, isAbortOrStale } from './scopeLoader'
 import type {
   CurrentMeasurementResponse,
@@ -45,8 +45,7 @@ export class MeasurementsStore {
   private currentCtrl: AbortController | null = null
   private historyCtrl: AbortController | null = null
 
-  constructor(nowMs?: number) {
-    const defaults = defaultViRangeInputs(nowMs)
+  constructor() {
     this.state = {
       nodeId: '',
       current: {
@@ -58,8 +57,8 @@ export class MeasurementsStore {
       history: {
         timeMode: 'known',
         viewTab: 'table',
-        fromInput: defaults.fromInput,
-        toInput: defaults.toInput,
+        fromInput: '',
+        toInput: '',
         loading: false,
         loadingMore: false,
         error: '',
@@ -160,16 +159,15 @@ export class MeasurementsStore {
     })
   }
 
-  resetDefaultFilter(nowMs?: number) {
-    const defaults = defaultViRangeInputs(nowMs)
+  resetDefaultFilter() {
     this.historyGen += 1
     this.historyCtrl?.abort()
     this.historyCtrl = null
     this.emit({
       history: {
         ...this.state.history,
-        fromInput: defaults.fromInput,
-        toInput: defaults.toInput,
+        fromInput: '',
+        toInput: '',
         nextCursor: null,
         viewToken: null,
       },

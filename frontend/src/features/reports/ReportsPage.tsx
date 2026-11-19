@@ -263,14 +263,6 @@ function ReportsViewPanel({ csrf }: { csrf: string }) {
               >
                 Mặc định 24h
               </button>
-              <button
-                type="button"
-                className="btn-ghost btn-sm"
-                disabled={snap.creating}
-                onClick={() => store.clearRangeForServerDefault()}
-              >
-                24h theo server
-              </button>
             </div>
           </FilterBar>
         </section>
