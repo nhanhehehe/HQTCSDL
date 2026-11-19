@@ -425,3 +425,40 @@ COMMIT TRANSACTION;
   Remove-Item Env:HQ_EXPECT_TEST_DATABASE
   ```
 - Gateway Simulator CLI: xem hướng dẫn chạy và giới hạn phần mềm tại [tools/README.md](../tools/README.md).
+
+## FL-07 / FL-12 (G3) / FL-13 — Truy vấn, Dashboard dữ liệu và Báo cáo CSV
+
+Nhóm G3 giữ nguyên Alembic head `fee0fa015af7` (không thêm migration hay bảng lưu báo cáo lâu dài) và giữ cố định thứ tự 5 đại lượng `temperature`, `airHumidity`, `pressure`, `light`, `soilMoisture` trên toàn bộ API/Web/CSV:
+
+- **Biến môi trường G3 trong `backend/.env` (dùng placeholder khi khởi tạo, không commit secret thật):**
+  - `HQ_REPORT_SECRET`: chuỗi ngẫu nhiên riêng, tối thiểu 32 byte UTF-8, **bắt buộc khác** `HQ_CSRF_SECRET` và `HQ_CURSOR_SECRET`; dùng để ký `snapshot_token` (`REPORT_V1`). Thiếu secret làm các endpoint tạo báo cáo / xuất CSV trả `503`.
+  - `HQ_REPORT_SNAPSHOT_TTL_SECONDS`: số nguyên dương (mặc định `900`, tức 15 phút), kết hợp `min(ttl, session.expires_at)`.
+  - `HQ_NODE_TIME_PROFILES`: JSON map theo `device_code` (`{"REPLACE_DEVICE_CODE":{"sampling_interval_seconds":60,"normal_delivery_budget_seconds":30}}`), mặc định `{}`. Node chưa khai báo profile có trạng thái freshness `PROFILE_MISSING` khi đang có số đo `AVAILABLE`.
+- **Hợp đồng dữ liệu G3:**
+  - `GET /api/v1/dashboard?farm_id=<id>[&node_id=<id>]` trả `capabilities: { monitoring: false, alerts: false }` và `null` cho các trường G4 (`active_count`, `monitoring`, `evaluation`, `active_alerts`).
+  - `GET /api/v1/nodes/{id}/measurements/current|measurements|measurements/chart` dùng `view_token` + cursor HMAC (`HQ_CURSOR_SECRET`), tách luồng `known` (`t_node` hợp lệ) khỏi `unknown` (`t_node IS NULL`). Backend chart API đã sẵn sàng; phần render thư viện biểu đồ trên FE được hoãn sau G3/G4 (`G3-D05`).
+  - `POST /api/v1/reports/measurements` tạo snapshot thống kê `SNAPSHOT` (loại trừ bản ghi `UNKNOWN`) và cấp `snapshot_token`; `POST /api/v1/reports/measurements/csv` xuất CSV 16 cột (UTF-8 BOM, CRLF, `QUOTE_ALL`, kèm lớp bảo vệ formula injection) theo `snapshot_token` trong `READ COMMITTED`.
+  - Lưu ý nếu chạy backend/FE thủ công ở local khi đã cấu hình `HQ_REPORT_SECRET`: trình duyệt cần tải lại tab hoặc đăng nhập lại nếu vừa đổi secret.
+
+### Kiểm thử offline và SQL Server cho G3
+
+- Offline Backend (từ `backend/`):
+  ```powershell
+  uv run pytest tests/test_g3_config_time.py tests/test_measurements_api.py tests/test_dashboard_api.py tests/test_reports_api.py -v
+  ```
+- Offline Frontend (từ `frontend/`):
+  ```powershell
+  npm run typecheck
+  npm test
+  npm run build
+  ```
+- SQL Server thật opt-in trên DB test disposable đã lên `fee0fa015af7` (từ `backend/`):
+  `test_sql_g3.py` đọc **duy nhất** `HQ_AUTH_TEST_DATABASE_URL` (không fallback sang `HQ_DATABASE_URL`) và đối chiếu tên DB với `HQ_EXPECT_TEST_DATABASE`:
+  ```powershell
+  $env:HQ_RUN_SQL_TESTS = '1'
+  $env:HQ_EXPECT_TEST_DATABASE = 'HQTCSDL_test_ten'
+  uv run pytest tests/test_sql_g3.py -v
+  Remove-Item Env:HQ_RUN_SQL_TESTS
+  Remove-Item Env:HQ_EXPECT_TEST_DATABASE
+  ```
+- Giới hạn kiểm chứng: bộ test offline và SQL Server thật không thay cho kiểm tra thủ công trên trình duyệt (điều hướng `/dashboard`, `/measurements`, `/reports`, filter, copy/phân trang, hết phiên) và mở file CSV UTF-8 BOM thực tế trên Excel / Google Sheets / LibreOffice Calc.
