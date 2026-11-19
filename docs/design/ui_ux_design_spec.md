@@ -381,7 +381,7 @@ Tổ chức lại [DevicesPanel.tsx](../../frontend/src/features/devices/Devices
     - `airHumidity`: `%RH`, `0..100`, `2` chữ số thập phân
     - `pressure`: `hPa`, `300..1100`, `2` chữ số thập phân
     - `light`: `lux`, `0..65535`, `1` chữ số thập phân
-    - `soilMoisture`: `%` (tương đối sau hiệu chuẩn), `0..100`, `1` chữ số thập phân
+    - `soilMoisture`: `% tương đối` (theo seed CSDL M1 `database/seed_foundation.sql`; API báo cáo & token `REPORT_V1` chấp nhận cả `% tương đối` và `%`), `0..100`, `1` chữ số thập phân
 
 ---
 
@@ -437,8 +437,8 @@ Tổ chức lại [DevicesPanel.tsx](../../frontend/src/features/devices/Devices
 +------------------------------------------------------------------------------+
 | BỘ LỌC TẠO BÁO CÁO (Draft State — tách biệt với Kết quả bên dưới)            |
 | [Farm * v]  [Zone v]  [Node * v]                                             |
-| Từ: [ 18/11/2026 15:00 ]  Đến: [ 19/11/2026 15:00 ] (UTC+07:00, mặc định 24h)|
-| [ Tạo báo cáo (POST /api/v1/reports/measurements) ]                          |
+| Từ: [ 18/11/2026 15:00 ]  Đến: [ 19/11/2026 15:00 ] (UTC+07:00, trống = 24h) |
+| [ Tạo báo cáo (POST /api/v1/reports/measurements) ]  [ Mặc định 24h ]        |
 +------------------------------------------------------------------------------+
 | KẾT QUẢ BÁO CÁO (Result Snapshot)     [ Xuất CSV (Khớp snapshot hiện hành) ] |
 | [Banner nếu Draft đã sửa: "Bộ lọc đã thay đổi — cần Tạo lại báo cáo để xuất"]|
@@ -446,12 +446,12 @@ Tổ chức lại [DevicesPanel.tsx](../../frontend/src/features/devices/Devices
 |           Chốt lúc: 15:10:02 +07:00 | Tổng bản ghi (N_total): 144            |
 |           Hiệu lực xuất CSV đến: 15:25:02 +07:00 (15 phút / hết phiên)       |
 | +--------------------------------------------------------------------------+ |
-| | Đại lượng     | Đơn vị | Hợp lệ | Lỗi | Nhỏ nhất | Trung bình | Lớn nhất | |
-| | Nhiệt độ      | °C     | 142    | 2   | 21.4     | 26.85      | 33.1     | |
-| | Độ ẩm KK      | %RH    | 144    | 0   | 55       | 70.12      | 84.5     | |
-| | Áp suất       | hPa    | 144    | 0   | 1008.2   | 1011.45    | 1014.8   | |
-| | Ánh sáng      | lux    | 144    | 0   | 0        | 8420.5     | 45200    | |
-| | Độ ẩm đất     | %      | 0      | 144 | —        | —          | —        | |
+| | Đại lượng     | Đơn vị      | Hợp lệ | Lỗi | Nhỏ nhất | Trung bình | Lớn nhất | |
+| | Nhiệt độ      | °C          | 142    | 2   | 21.4     | 26.85      | 33.1     | |
+| | Độ ẩm KK      | %RH         | 144    | 0   | 55       | 70.12      | 84.5     | |
+| | Áp suất       | hPa         | 144    | 0   | 1008.2   | 1011.45    | 1014.8   | |
+| | Ánh sáng      | lux         | 144    | 0   | 0        | 8420.5     | 45200    | |
+| | Độ ẩm đất     | % tương đối | 0      | 144 | —        | —          | —        | |
 | +--------------------------------------------------------------------------+ |
 | Ghi chú: Bản ghi chưa xác định giờ đo (UNKNOWN) không tính vào báo cáo này.  |
 |          [Xem nhóm bản ghi UNKNOWN tại Dữ liệu đo (FL-07) →]                 |

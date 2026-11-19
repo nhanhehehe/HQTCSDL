@@ -461,4 +461,4 @@ Nhóm G3 giữ nguyên Alembic head `fee0fa015af7` (không thêm migration hay b
   Remove-Item Env:HQ_RUN_SQL_TESTS
   Remove-Item Env:HQ_EXPECT_TEST_DATABASE
   ```
-- Giới hạn kiểm chứng: bộ test offline và SQL Server thật không thay cho kiểm tra thủ công trên trình duyệt (điều hướng `/dashboard`, `/measurements`, `/reports`, filter, copy/phân trang, hết phiên) và mở file CSV UTF-8 BOM thực tế trên Excel / Google Sheets / LibreOffice Calc.
+- Giới hạn kiểm chứng: bộ test offline và SQL Server thật không thay cho kiểm tra thủ công trên trình duyệt (điều hướng `/dashboard`, `/measurements`, `/reports`, filter, copy/phân trang, hết phiên) và mở file CSV UTF-8 BOM thực tế trên Excel / Google Sheets / LibreOffice Calc. Xem tổng hợp kết quả tại [g3-query-display-reports-validation.md](g3-query-display-reports-validation.md).
