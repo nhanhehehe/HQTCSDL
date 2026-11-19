@@ -177,7 +177,7 @@ Kế thừa bảng màu nông nghiệp hiện có trong [style.css](../../fronte
 ```
 
 - **Thao tác người dùng:**
-  - Nhập `username` (max 128) và `password` (max 1024), gửi `POST /api/v1/auth/login`. Xóa ngay state `password` ngay khi submit (như [AuthPanel.tsx](../../frontend/src/features/auth/AuthPanel.tsx)).
+  - Nhập `username` (max 128) và `password` (max 1024), gửi `POST /api/v1/auth/login`. Xóa ngay state `password` ngay khi submit (như [LoginPage.tsx](../../frontend/src/features/auth/LoginPage.tsx)).
   - Nút **Kiểm tra phiên hiện có** gọi `GET /api/v1/auth/session` (hữu ích khi reload hoặc phục hồi kết nối).
   - Nếu đăng xuất trước đó không chắc kết quả (`uncertainLogout`), hiển thị nút **Thử đăng xuất lại** thay vì form đăng nhập.
 
