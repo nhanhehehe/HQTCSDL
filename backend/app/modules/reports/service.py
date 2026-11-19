@@ -13,7 +13,7 @@ from app.core.web import (
 )
 from app.modules.auth import repository as auth_repo
 from app.modules.auth.service import invalid_session, storage_error
-from app.modules.measurements.repository import METRIC_ORDER, METRIC_UNITS
+from app.modules.measurements.repository import METRIC_ALLOWED_UNITS, METRIC_ORDER
 from app.modules.reports import repository as repo
 from app.modules.reports.csv_builder import build_report_csv_bytes
 from app.modules.reports.rounding import round_avg_half_up, round_stat_half_up
@@ -84,7 +84,7 @@ class ReportService:
             rows_out: list[dict[str, Any]] = []
             for metric_code in METRIC_ORDER:
                 r = by_metric[metric_code]
-                if r["unit"] != METRIC_UNITS[metric_code]:
+                if r["unit"] not in METRIC_ALLOWED_UNITS[metric_code]:
                     raise storage_error()
                 seen_count = int(r["seen_count"])
                 n_valid = int(r["n_valid"])

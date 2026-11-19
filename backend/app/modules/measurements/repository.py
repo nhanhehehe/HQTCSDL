@@ -14,7 +14,14 @@ METRIC_UNITS: dict[str, str] = {
     "airHumidity": "%RH",
     "pressure": "hPa",
     "light": "lux",
-    "soilMoisture": "%",
+    "soilMoisture": "% tương đối",
+}
+METRIC_ALLOWED_UNITS: dict[str, frozenset[str]] = {
+    "temperature": frozenset({"°C"}),
+    "airHumidity": frozenset({"%RH"}),
+    "pressure": frozenset({"hPa"}),
+    "light": frozenset({"lux"}),
+    "soilMoisture": frozenset({"%", "% tương đối"}),
 }
 VALID_READ_STATUSES = frozenset({"OK", "READ_ERROR", "INVALID_VALUE"})
 _EPOCH_UTC = datetime(1970, 1, 1, tzinfo=UTC)

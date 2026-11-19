@@ -340,7 +340,7 @@ def test_create_report_strict_input_half_up_and_503_guards(monkeypatch):
         # All invalid soilMoisture -> null stats, n_invalid == N_total
         assert body["rows"][4] == {
             "metric_code": "soilMoisture",
-            "unit": "%",
+            "unit": "% tương đối",
             "n_valid": "0",
             "n_invalid": "4",
             "min": None,
@@ -591,3 +591,84 @@ def test_csv_token_tamper_expiry_session_and_context_errors(monkeypatch):
             ).status_code
             == 404
         )
+
+
+def test_soil_moisture_allowed_and_rejected_units(monkeypatch):
+    app, _state = _client_with_fake_reports(monkeypatch)
+    override = {"unit": "%"}
+    orig_agg = report_repo.aggregate_node_measurements
+
+    def custom_agg(session, *, node_id, lo, hi):
+        n_total, rows = orig_agg(session, node_id=node_id, lo=lo, hi=hi)
+        for row in rows:
+            if row["metric_code"] == "soilMoisture":
+                row["unit"] = override["unit"]
+        return n_total, rows
+
+    monkeypatch.setattr(report_repo, "aggregate_node_measurements", custom_agg)
+
+    with TestClient(app) as client:
+        client.cookies.set("hq_session", "valid-cookie")
+        for allowed_unit in ("% tương đối", "%"):
+            override["unit"] = allowed_unit
+            create_res = client.post(
+                "/api/v1/reports/measurements",
+                headers=WEB_HEADERS,
+                json={"node_id": "101"},
+            )
+            assert create_res.status_code == 200
+            report = create_res.json()
+            assert report["rows"][4]["unit"] == allowed_unit
+
+            csv_res = client.post(
+                "/api/v1/reports/measurements/csv",
+                headers=WEB_HEADERS,
+                json={"snapshot_token": report["snapshot_token"]},
+            )
+            assert csv_res.status_code == 200
+            parsed_rows = list(
+                csv.reader(io.StringIO(csv_res.content[3:].decode("utf-8"), newline=""))
+            )
+            assert parsed_rows[5][10] == allowed_unit
+
+        # Invalid catalog unit -> 503 STORAGE_UNAVAILABLE on create
+        override["unit"] = "mm"
+        bad_create = client.post(
+            "/api/v1/reports/measurements",
+            headers=WEB_HEADERS,
+            json={"node_id": "101"},
+        )
+        assert bad_create.status_code == 503
+        assert bad_create.json()["error"]["code"] == "STORAGE_UNAVAILABLE"
+
+        # Forged valid-MAC token with invalid unit -> 400 TOKEN_INVALID on CSV export
+        override["unit"] = "% tương đối"
+        good_tok = client.post(
+            "/api/v1/reports/measurements",
+            headers=WEB_HEADERS,
+            json={"node_id": "101"},
+        ).json()["snapshot_token"]
+        _, body_b64, _ = good_tok.split(".")
+        decoded = json.loads(base64.urlsafe_b64decode(body_b64 + "=" * (-len(body_b64) % 4)))
+        decoded["report"]["rows"][4]["unit"] = "mm"
+        forged_b = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    decoded, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                ).encode("utf-8")
+            )
+            .decode()
+            .rstrip("=")
+        )
+        forged_s = (
+            base64.urlsafe_b64encode(hmac.digest(b"R" * 32, f"v1.{forged_b}".encode(), "sha256"))
+            .decode()
+            .rstrip("=")
+        )
+        forged_res = client.post(
+            "/api/v1/reports/measurements/csv",
+            headers=WEB_HEADERS,
+            json={"snapshot_token": f"v1.{forged_b}.{forged_s}"},
+        )
+        assert forged_res.status_code == 400
+        assert forged_res.json()["error"]["code"] == "TOKEN_INVALID"

@@ -13,7 +13,7 @@ from app.core.web import (
 )
 from app.modules.auth.service import storage_error
 from app.modules.devices.schemas import identity
-from app.modules.measurements.repository import METRIC_ORDER, METRIC_UNITS
+from app.modules.measurements.repository import METRIC_ALLOWED_UNITS, METRIC_ORDER
 
 MAX_REPORT_TOKEN_CHARS = 32768
 REPORT_PURPOSE = "REPORT_V1"
@@ -177,7 +177,7 @@ def verify_report_token(settings, token: str) -> dict[str, Any]:
                 raise ValueError()
             if row["metric_code"] != expected_metric:
                 raise ValueError()
-            if row["unit"] != METRIC_UNITS[expected_metric]:
+            if row["unit"] not in METRIC_ALLOWED_UNITS[expected_metric]:
                 raise ValueError()
             n_valid = _non_neg_bigint(row["n_valid"])
             n_invalid = _non_neg_bigint(row["n_invalid"])
