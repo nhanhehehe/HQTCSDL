@@ -64,3 +64,53 @@ test('mutation network failure is surfaced once without automatic retry', async 
     assert.equal(calls, 1)
   } finally { globalThis.fetch = original }
 })
+
+test('requestCsvBlob validates text/csv MIME, filename, 401 and generation invalidation', async () => {
+  const api = await client()
+  const original = globalThis.fetch
+  let cleared = 0
+  const unsub = api.onUnauthorized(() => { cleared += 1 })
+  try {
+    globalThis.fetch = async () =>
+      new Response('\ufeffheader\r\n', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': 'attachment; filename="measurements_node_1_20261115T040500000Z.csv"',
+        },
+      })
+    const ok = await api.requestCsvBlob('/api/v1/reports/measurements/csv', { method: 'POST' })
+    assert.equal(ok.filename, 'measurements_node_1_20261115T040500000Z.csv')
+    assert.equal(ok.contentType.startsWith('text/csv'), true)
+
+    // Wrong MIME (e.g. accidental 200 JSON) rejected
+    globalThis.fetch = async () =>
+      new Response('{"oops":true}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    await assert.rejects(
+      api.requestCsvBlob('/api/v1/reports/measurements/csv', { method: 'POST' }),
+      err => err instanceof api.ApiError && err.code === 'CSV_INVALID_RESPONSE',
+    )
+
+    // 401 triggers unauthorized callback
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ error: { code: 'SESSION_INVALID', message: 'Expired' } }), {
+        status: 401,
+      })
+    await assert.rejects(
+      api.requestCsvBlob('/api/v1/reports/measurements/csv', { method: 'POST' }),
+      err => err instanceof api.ApiError && err.status === 401,
+    )
+    assert.equal(cleared, 1)
+
+    // Invalidation mid-flight throws StaleResponse
+    let release
+    globalThis.fetch = () => new Promise(resolve => { release = resolve })
+    const pending = api.requestCsvBlob('/api/v1/reports/measurements/csv', { method: 'POST' })
+    api.invalidateRequests()
+    release(new Response('a,b', { status: 200, headers: { 'Content-Type': 'text/csv' } }))
+    await assert.rejects(pending, api.StaleResponse)
+  } finally {
+    unsub()
+    globalThis.fetch = original
+  }
+})

@@ -44,7 +44,11 @@ export function Sidebar({
                       <span>{item.label}</span>
                       <span
                         className={
-                          item.stage === 'G1' ? 'stage-pill stage-pill-g1' : 'stage-pill'
+                          item.stage === 'G1' || item.stage === 'G3'
+                            ? 'stage-pill stage-pill-g1'
+                            : item.stage === 'G3/G4'
+                              ? 'stage-pill stage-pill-g3'
+                              : 'stage-pill'
                         }
                       >
                         {item.stage}
