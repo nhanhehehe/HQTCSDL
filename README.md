@@ -1,259 +1,254 @@
-# HQTCSDL — Giám sát nông trại IoT
+# HQTCSDL — Nền tảng giám sát dữ liệu IoT nông trại
 
-Nền tảng **FastAPI + SQL Server + React/TypeScript** cho hai Node và một Gateway.
-Code cũ đã lưu tại `archive/legacy-before-foundation`; khung này bắt đầu từ
-`develop` sau cleanup. Thiết kế nghiệp vụ nằm trên Confluence, code/test nằm ở đây.
+Ứng dụng quản lý khu vực, thiết bị và dữ liệu từ cảm biến nông trại. **Backend:** Python/FastAPI · **CSDL:** SQL Server/Alembic · **Frontend:** React/TypeScript/Vite.
 
-| Thư mục | Vai trò |
+Luồng dữ liệu: **Node cảm biến → Gateway (LoRa) → HTTP API → SQL Server → Web**. Gateway Simulator có thể gửi dữ liệu mẫu qua HTTP để kiểm thử phần mềm khi chưa kết nối phần cứng. Hệ thống hướng đến mô hình **2 Node / 1 Gateway**, theo dõi 5 đại lượng: nhiệt độ, độ ẩm không khí, áp suất, ánh sáng và độ ẩm đất. UAV là hướng mở rộng, **chưa triển khai** trong source.
+
+## Chức năng hiện có
+
+| Nhóm | Chức năng |
 | --- | --- |
-| `backend/app/core` | Cấu hình, DB/session, lỗi và log dùng chung |
-| `backend/app/modules` | Module theo 03.3; thêm theo luồng đã review |
-| `backend/migrations` | Alembic; M1 8 bảng nền tảng, M2 thêm 7 bảng đo/config/runtime |
-| `backend/tests` | Unit/API giả lập, SQL migration offline và SQL auth/M2 opt-in |
-| `frontend/src` | React: `app`, `api`, `features` |
-| `database` | Hướng dẫn CSDL và `seed_foundation.sql` (Farm/Zone/Metric) |
-| `docs`, `tools` | Hướng dẫn phát triển, kiểm chứng và công cụ tích hợp |
+| Xác thực | Đăng nhập/đăng xuất Admin, session cookie HttpOnly và CSRF |
+| Quản trị | Tạo/xem/sửa Farm, Zone, Gateway, Node; archive/restore khu vực; cấp/thu hồi Gateway API key |
+| Thu thập | Nhận batch số đo qua `POST /api/v1/ingestion/measurements`; chống trùng, ACK2, retry bằng Gateway Simulator |
+| Dữ liệu | Số đo hiện tại, lịch sử, API chuỗi dữ liệu, độ mới (freshness) |
+| Dashboard | Tổng quan Farm/Node và số đo; **chưa có cảnh báo** |
+| Báo cáo | Thống kê 5 đại lượng theo khoảng thời gian, xuất CSV theo snapshot |
 
-## Chức năng trong source hiện tại
+**Chưa hoàn thành:** cấu hình ngưỡng, worker giám sát/cảnh báo (G4) và thử nghiệm tích hợp phần cứng ESP32/LoRa end-to-end. Màn hình Cảnh báo/Giám sát hiện là placeholder; API chuỗi biểu đồ đã có nhưng giao diện biểu đồ chưa triển khai. Simulator **không thay thế** kiểm thử phần cứng thật.
 
-| Phạm vi | Đã triển khai | Giới hạn |
-| --- | --- | --- |
-| FL-01 — Auth | Admin CLI, login/session/logout, cookie/CSRF và FE xác thực | Không có tài khoản mặc định, đăng ký web hoặc reset mật khẩu |
-| FL-02 — Khu vực | CRUD & vòng đời `archive`/`restore` Farm/Zone trên SQL Server (`/api/v1/farms`, `/zones`), adapter `/api/v1/context?farm_id={id}` | Archive bị chặn (`409 AREA_IN_USE`) nếu còn thiết bị bật quyền; tắt quyền thuộc FL-04 (G4) |
-| FL-03 — Hồ sơ & Khóa | Tạo/list/detail/PATCH Node/Gateway (chọn `farm_id`/`zone_id` từ DB); cấp/xem/thu hồi Gateway Credential (tối đa 2 active); `GET /api/v1/metrics` | Không ghép/chuyển/xóa thiết bị hoặc bật/tắt quyền (FL-04 thuộc G4) |
-| FL-06 — Ingestion & Simulator | `POST /api/v1/ingestion/measurements` (`X-API-Key`, D04/D05/D06, Canonical-v1, per-record Tx, ACK2, `NodeRuntime`/`EvaluationState`) và Gateway Simulator CLI (`tools/gateway_simulator`) | Simulator kiểm chứng hợp đồng phần mềm, không thay ESP32/LoRa HMAC/Flash-SD thật (`FL-05`); chưa có worker đánh giá (`G4`) |
-| M1/M2 và PR-A — CSDL | 15 bảng nghiệp vụ; PR-A (`fee0fa015af7`) thêm `archived_at`/`row_ver` cho Farm/Zone | Chưa có M3 (episode/audit) hay monitoring worker (thuộc G4) |
+## Chạy local trên Windows (PowerShell)
 
-Node mới chưa gắn Gateway vẫn là hồ sơ hợp lệ, hiển thị **Chưa liên kết Gateway**.
-Tạo hồ sơ không đợi phần cứng và không chứng minh thiết bị online. Chưa có bản đo
-thì mốc cuối lưu là null; không tự tạo số đo, ngưỡng hoặc period giả.
+**Cần cài:** Git, Python **3.12**, [uv](https://docs.astral.sh/uv/getting-started/installation/), Node.js **24**/npm, SQL Server (Express hoặc Developer), SSMS và Microsoft **ODBC Driver 18 for SQL Server**.
 
-Source hiện tại chưa có M3, bật/tắt quyền nhận (FL-04),
-API xem số đo (FL-07), cấu hình giám sát (FL-08), worker cảnh báo (FL-09/10/11), dashboard hoặc báo cáo nghiệp vụ (FL-12/13). Trạng thái
-source trong checkout này không chứng minh tính năng đã merge, đã áp lên mọi DB
-hoặc đã nghiệm thu đầy đủ AC/NFR.
+### 1. Clone source
 
-## Bắt đầu
-
-Cần Git, **Python 3.12**, **uv**, **Node.js 24 LTS/npm**. Cài SQL Server native và
-Microsoft ODBC Driver 18 khi cần kết nối DB. `pyodbc` không tự cài driver hệ điều hành.
-
-```bash
+```powershell
 git clone https://github.com/nhanhehehe/HQTCSDL.git
 cd HQTCSDL
 git switch develop
-cd backend
-uv sync --locked
 ```
 
-Chỉ khi **chưa có** `backend/.env`, tạo file từ `backend/.env.example`.
-Giữ nguyên file local nếu đã tồn tại; không copy đè. Có thể chạy liveness chưa
-cấu hình SQL; readiness sẽ 503.
+### 2. Tạo SQL Server database
 
-Để dựng DB dùng được, làm theo thứ tự:
+Mở **SSMS**, kết nối instance SQL Server local bằng tài khoản quản trị. Ví dụ với SQL Express: `.\SQLEXPRESS`. Bật **SQL Server and Windows Authentication mode** nếu dùng SQL login. Chạy SQL sau **một lần** trên môi trường local mới; thay hai mật khẩu placeholder bằng mật khẩu mạnh, khác nhau:
 
-1. [Tạo DB dev/test, tài khoản app/migration và cấu hình SNAPSHOT](docs/development.md#tao-database-va-cap-quyen).
-2. [Điền hai URL và kiểm tra DB/login thực tế](docs/development.md#cau-hinh-backend-va-kiem-tra-dich).
-   `HQ_DATABASE_URL` dùng tài khoản app; `HQ_MIGRATION_DATABASE_URL` bắt buộc cho
-   Alembic khi kết nối DB hoặc sinh SQL, không fallback sang tài khoản app.
-3. [Áp M1 trên DB test trước, chạy seed và kiểm tra kết quả](database/README.md#ap-m1-va-seed).
-   Mỗi DB đích cần được migration riêng; đổi nhãn `HQ_ENV` không tự đổi DB.
-4. [Áp và kiểm M2 trên DB test](database/README.md#m2--schema-đo-cấu-hình-và-runtime)
-   để chạy đầy đủ hồ sơ thiết bị. Auth chỉ cần M1; FL-03 cần cả M2.
-   [PR-A sau M2](database/README.md#pr-a--cột-vòng-đời-farmzone) chuẩn bị schema
-   vòng đời Farm/Zone; xem điều kiện an toàn trước khi nâng cấp tới head.
-5. Tạo Admin riêng trên DB dự định dùng nếu chưa có; đối chiếu cấu hình khu vực
-   bên dưới rồi restart Backend. Không tự chạy lại seed nếu dữ liệu nền đã đủ.
+```sql
+USE master;
+GO
+IF DB_ID(N'HQTCSDL_local') IS NULL CREATE DATABASE [HQTCSDL_local];
+GO
+ALTER DATABASE [HQTCSDL_local] SET AUTO_CLOSE OFF;
+ALTER DATABASE [HQTCSDL_local] SET ALLOW_SNAPSHOT_ISOLATION ON;
+GO
+IF SUSER_ID(N'hqtcsdl_app_local') IS NULL
+    CREATE LOGIN [hqtcsdl_app_local]
+    WITH PASSWORD = N'REPLACE_WITH_APP_PASSWORD', CHECK_POLICY = ON;
+IF SUSER_ID(N'hqtcsdl_migration_local') IS NULL
+    CREATE LOGIN [hqtcsdl_migration_local]
+    WITH PASSWORD = N'REPLACE_WITH_MIGRATION_PASSWORD', CHECK_POLICY = ON;
+GO
+USE [HQTCSDL_local];
+GO
+IF USER_ID(N'hqtcsdl_app_local') IS NULL
+    CREATE USER [hqtcsdl_app_local] FOR LOGIN [hqtcsdl_app_local];
+IF USER_ID(N'hqtcsdl_migration_local') IS NULL
+    CREATE USER [hqtcsdl_migration_local] FOR LOGIN [hqtcsdl_migration_local];
+GO
+GRANT CONNECT TO [hqtcsdl_app_local];
+GRANT SELECT, INSERT, UPDATE, DELETE ON SCHEMA::dbo TO [hqtcsdl_app_local];
 
-Kết quả M1: 8 bảng nghiệp vụ + `alembic_version`; seed 1 Farm, 2 Zone, 5 metric.
-Seed không tạo Admin; làm theo mục [Tạo tài khoản Admin](#tao-tai-khoan-admin) bên dưới
-để đăng nhập. Đổi `backend/.env` thì khởi động lại Backend để nhận cấu hình mới.
-Không commit `.env`.
+GRANT CONNECT, CREATE TABLE TO [hqtcsdl_migration_local];
+GRANT ALTER, REFERENCES, SELECT, INSERT, UPDATE, DELETE
+    ON SCHEMA::dbo TO [hqtcsdl_migration_local];
+GO
+```
 
-Backend **không tự chạy migration, seed hay tạo Admin khi khởi động**. Hai URL có
-thể trỏ các DB khác nhau; migration thành công trên dev không cập nhật test.
-Trước mỗi thao tác DB, đối chiếu server/instance, DB và login thực tế.
+Hai login có vai trò riêng: **app** truy cập dữ liệu, **migration** quản lý schema. Không dùng tài khoản `sa` trong Backend.
 
-### Cấu hình khu vực và phân trang
+### 3. Tạo và điền `backend/.env`
 
-Chỉ bổ sung biến còn thiếu trong `.env` hiện có; xem
-[mẫu cấu hình](backend/.env.example) và
-[hướng dẫn FL-02/FL-03](docs/development.md#fl-02fl-03--khu-vực-và-hồ-sơ-thiết-bị).
+Từ thư mục gốc repo:
 
-| Biến | Cách dùng |
-| --- | --- |
-| `HQ_CURSOR_SECRET` | Secret ngẫu nhiên riêng để ký cursor, khác CSRF secret, giữ ổn định qua restart |
-| `HQ_DATASET_GENERATION` | Nhãn dataset, mặc định `1`; đổi sau restore/reset để vô hiệu cursor cũ, không đổi mỗi lần sửa hồ sơ |
+```powershell
+cd backend
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+python -c "import secrets; [print(secrets.token_urlsafe(48)) for _ in range(3)]"
+```
 
-Nguồn Farm/Zone được quản lý trực tiếp trong SQL Server qua API/UI quản trị
-(`/api/v1/farms`, `/api/v1/zones`), không còn dùng `HQ_AREA_MANIFEST`. Database
-trống Farm vẫn cho phép đăng nhập và tạo Farm mới qua giao diện.
-Cấu hình cursor secret trước khi test phân trang; không đưa secret vào FE/log/Git.
+Lệnh cuối sinh **3 secret ngẫu nhiên khác nhau**. Mở `backend/.env`, giữ hoặc bổ sung các dòng sau (thay password và secret, bỏ dấu `#` nếu có):
 
-### Chạy Backend và Frontend
+```dotenv
+HQ_ENV=dev
+HQ_WEB_ORIGIN=http://127.0.0.1:5173
+HQ_COOKIE_SECURE=false
 
-Trong thư mục `backend`:
+HQ_DATABASE_URL=mssql+pyodbc://hqtcsdl_app_local:APP_PASSWORD_URL_ENCODED@localhost\SQLEXPRESS/HQTCSDL_local?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes
+HQ_MIGRATION_DATABASE_URL=mssql+pyodbc://hqtcsdl_migration_local:MIGRATION_PASSWORD_URL_ENCODED@localhost\SQLEXPRESS/HQTCSDL_local?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes
 
-```bash
+HQ_CSRF_SECRET=PASTE_RANDOM_SECRET_1
+HQ_CURSOR_SECRET=PASTE_RANDOM_SECRET_2
+HQ_REPORT_SECRET=PASTE_RANDOM_SECRET_3
+HQ_DATASET_GENERATION=1
+HQ_REPORT_SNAPSHOT_TTL_SECONDS=900
+HQ_NODE_TIME_PROFILES={"NODE-SIM-01":{"sampling_interval_seconds":60,"normal_delivery_budget_seconds":300},"NODE-SIM-02":{"sampling_interval_seconds":60,"normal_delivery_budget_seconds":300}}
+```
+
+- Thay `localhost\SQLEXPRESS` bằng **Server name thật trong SSMS**; nếu SQL Server chạy cổng cố định `1433`, có thể dùng `localhost:1433`. SQL Express named instance không mặc định chạy cổng 1433.
+- Mật khẩu trong URL phải **percent-encode** các ký tự đặc biệt (ví dụ `@` → `%40`, `#` → `%23`). `HQ_ENV` là nhãn môi trường, **không tự chọn DB**.
+- `HQ_CSRF_SECRET` bảo vệ phiên, `HQ_CURSOR_SECRET` ký cursor phân trang, `HQ_REPORT_SECRET` ký snapshot báo cáo (tối thiểu 32 byte). Giữ ổn định qua restart và **không commit `.env`**.
+- `HQ_NODE_TIME_PROFILES` đặt chu kỳ đo và thời gian giao dự kiến theo đúng **mã Node**; có thể sửa sau khi tạo Node. Thiếu profile thì độ mới có thể hiển thị `PROFILE_MISSING`.
+- `TrustServerCertificate=yes` chỉ dành cho local với chứng chỉ tự ký. Không copy đè `.env` đang sử dụng.
+
+### 4. Migration, seed và tạo Admin
+
+Vẫn tại `backend/`:
+
+```powershell
+uv sync --locked
+uv run alembic upgrade head
+uv run alembic current
+```
+
+`alembic current` cần hiển thị `fee0fa015af7` (M1 → M2 → bổ sung vòng đời Farm/Zone). **Backend không tự migrate hay seed khi khởi động.**
+
+**Seed nền tảng:** trong SSMS, chọn DB `HQTCSDL_local`, mở file `database/seed_foundation.sql` (ở thư mục repo) và nhấn **Execute/F5**. Trên DB mới, seed tạo **1 Farm** `FARM-01`, **2 Zone** `INDOOR` / `OUTDOOR` và **5 MetricDefinition**; chưa tạo thiết bị, số đo hay Admin.
+
+Tạo tài khoản Admin (trong `backend/`):
+
+```powershell
+uv run python -m app.modules.auth.create_admin Admin --database HQTCSDL_local
+```
+
+Nhập mật khẩu và xác nhận khi được hỏi. `--database` chỉ **kiểm tra tên DB**, không thay URL kết nối; lệnh sử dụng `HQ_MIGRATION_DATABASE_URL`.
+
+### 5. Khởi chạy Backend và Frontend
+
+**Terminal 1 — Backend** (trong `backend/`):
+
+```powershell
 uv run uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-Mở terminal khác, từ gốc repo:
+**Terminal 2 — Frontend** (từ thư mục gốc repo):
 
-```bash
+```powershell
 cd frontend
 npm ci
 npm run dev
 ```
 
-Mở http://127.0.0.1:5173. Vite proxy `/api` và `/health` sang Backend.
-
-- API docs: http://127.0.0.1:8000/docs
-- `/health/live`: tiến trình API phản hồi.
-- `/health/ready`: kiểm tra `SELECT 1` trên SQL Server; 503 khi thiếu cấu hình/lỗi.
-  Scope hiện tại là `foundation`, `monitoring=not_implemented`; **chưa chứng minh hệ thống
-  giám sát sẵn sàng**. Khi có worker phải bổ sung điều kiện sức khỏe worker.
-
-<a id="tao-tai-khoan-admin"></a>
-
-## Tạo tài khoản Admin
-
-Không có tài khoản/mật khẩu mặc định. Đây là tài khoản đăng nhập web, khác với
-SQL login app/migration trong hai URL kết nối.
-
-**Điều kiện:** SQL Server đang chạy, DB đích đã áp M1 (có `AdminAccount` và
-`AdminSession`), hai URL trong `backend/.env` cùng trỏ đúng DB dự định sử dụng.
-Auth chỉ cần M1; không cần áp M2 để tạo tài khoản. Lệnh tạo Admin dùng
-`HQ_MIGRATION_DATABASE_URL`; Backend đăng nhập dùng `HQ_DATABASE_URL`.
-
-1. Mở PowerShell tại gốc repo và cài dependency đã khóa:
-
-   ```powershell
-   cd backend
-   uv sync --locked
-   ```
-
-2. Tạo tài khoản với username mẫu `Admin` trên DB dev của bạn:
-
-   ```powershell
-   uv run python -m app.modules.auth.create_admin Admin --database HQTCSDL_dev_ten
-   ```
-
-   Thay `ten` bằng tên thành viên theo quy ước tạo DB, hoặc thay toàn bộ
-   `HQTCSDL_dev_ten` bằng tên DB thực tế của bạn; thay `Admin` nếu muốn username khác.
-   `--database` chỉ
-   xác nhận tên DB mong đợi, **không đổi DB trong URL**. Lệnh từ chối ghi nếu
-   `DB_NAME()` khác tên này. Nếu dùng terminal tại `backend` có `.venv` đã đồng bộ
-   nhưng chưa có `uv` trên PATH, có thể chạy:
-
-   ```powershell
-   .\.venv\Scripts\python.exe -m app.modules.auth.create_admin Admin --database HQTCSDL_dev_ten
-   ```
-
-3. Nhập mật khẩu tại `Password:` rồi nhập lại ở `Confirm password:`. Ký tự không
-   hiện trên màn hình là bình thường. Mật khẩu được lưu bằng hash Argon2id;
-   không ghi mật khẩu vào lệnh, README hoặc seed. Username phân biệt hoa/thường;
-   mật khẩu giữ nguyên cả khoảng trắng.
-
-4. Khi thấy `Admin created.`, tài khoản đã được commit. Mở
-   http://127.0.0.1:5173 và đăng nhập bằng username/mật khẩu vừa chọn. Backend và
-   Vite phải đang chạy theo hướng dẫn ở trên.
-
-Để đăng nhập, `.env` cần `HQ_CSRF_SECRET` riêng, ngẫu nhiên và ổn định; giữ nguyên
-secret nếu đã có. `HQ_WEB_ORIGIN` mặc định là `http://127.0.0.1:5173`, phải trùng
-origin browser, không có dấu `/` cuối. Dùng đúng `127.0.0.1` thay vì đổi sang
-`localhost` khi chưa đổi cấu hình. Với build phục vụ ở cổng 8000, đặt
-`HQ_WEB_ORIGIN=http://127.0.0.1:8000`. HTTP local dùng `HQ_COOKIE_SECURE=false`;
-HTTPS cần `true`. Restart Backend sau khi đổi cấu hình.
-
-| Thông báo / lỗi | Cách xử lý |
+| Địa chỉ | Mục đích |
 | --- | --- |
-| `Username exists; password was not changed.` | Tài khoản đã có; dùng mật khẩu cũ hoặc chọn username khác. Lệnh không reset mật khẩu. |
-| `Passwords do not match.` | Chạy lại lệnh và nhập hai lần giống nhau. |
-| `Database does not match --database` | Kiểm lại DB trong migration URL và tên xác nhận; không chuyển DB tùy tiện. |
-| `Storage operation failed` | Chưa xác nhận được tạo tài khoản; kiểm SQL/ODBC/quyền và M1 trước khi thử lại. |
-| Đăng nhập báo 403 | Kiểm origin browser, `HQ_WEB_ORIGIN` và restart Backend sau khi sửa. |
-| Đăng nhập báo 503 | Kiểm kết nối runtime SQL và `HQ_CSRF_SECRET`; không kết luận mật khẩu sai. |
+| http://127.0.0.1:5173 | Web app; đăng nhập bằng Admin đã tạo |
+| http://127.0.0.1:8000/docs | Swagger API |
+| http://127.0.0.1:8000/health/ready | Kiểm tra kết nối SQL (`ready` nếu DB kết nối được) |
 
-Chi tiết: [cấu hình auth và kiểm chứng](docs/development.md#t05t06--cấu-hình-và-tài-khoản-quản-trị).
+Frontend dùng Vite proxy `/api` sang Backend, không cần cấu hình URL FE riêng. Dùng **127.0.0.1**, tránh đổi sang `localhost` khi chưa chỉnh `HQ_WEB_ORIGIN`.
 
-## Kiểm tra trước PR
+## Tạo dữ liệu demo để thử Dashboard / Report
 
-```bash
-cd backend
-uv run ruff check .
-uv run ruff format --check .
-uv run pytest
-uv run alembic heads
+### 6. Đăng ký Gateway, Node và lấy API key
+
+Sau khi đăng nhập web:
+
+1. Vào **Farm & Zone**: kiểm tra `FARM-01`, `INDOOR`, `OUTDOOR` từ seed.
+2. Vào **Thiết bị & Khóa → Gateways & API Keys**: tạo Gateway mã **`GW-SIM-01`**, thuộc `FARM-01`; mở chi tiết Gateway và bấm **Cấp khóa mới**. **Sao chép API key** (`hqgw_v1_...`) ngay vì chỉ hiện một lần.
+3. Trong tab **Nodes**, tạo `NODE-SIM-01` tại `INDOOR` và `NODE-SIM-02` tại `OUTDOOR`, đều thuộc Farm trên.
+
+**Liên kết Node–Gateway:** bước này hiện là provisioning kỹ thuật qua SQL, **chưa có nút ghép cặp trên Web**. Trong SSMS, chọn đúng DB local và chạy:
+
+```sql
+USE [HQTCSDL_local];
+GO
+SET XACT_ABORT ON;
+BEGIN TRANSACTION;
+UPDATE n
+SET n.gateway_id = g.gateway_id
+FROM dbo.Node AS n
+JOIN dbo.Zone AS z ON z.zone_id = n.zone_id
+JOIN dbo.Gateway AS g
+    ON g.farm_id = z.farm_id AND g.gateway_code = 'GW-SIM-01'
+WHERE n.device_code IN ('NODE-SIM-01', 'NODE-SIM-02');
+
+IF @@ROWCOUNT <> 2
+BEGIN
+    ROLLBACK TRANSACTION;
+    THROW 50001, N'Phải tạo đủ 2 Node và 1 Gateway cùng Farm trước khi liên kết.', 1;
+END;
+COMMIT TRANSACTION;
+
+SELECT n.device_code, g.gateway_code
+FROM dbo.Node AS n
+LEFT JOIN dbo.Gateway AS g ON g.gateway_id = n.gateway_id
+WHERE n.device_code IN ('NODE-SIM-01', 'NODE-SIM-02');
 ```
 
-Từ `frontend`:
+Kết quả mong đợi: **cả 2 Node** đều liên kết `GW-SIM-01`. Đừng thực hiện provisioning mẫu trên DB có dữ liệu thật.
 
-```bash
+### 7. Gửi số đo mẫu bằng Gateway Simulator
+
+**Terminal 3** tại **gốc repo `HQTCSDL/`**, trong khi Backend vẫn chạy. Dán API key vừa cấp vào biến môi trường terminal (không lưu key trong code hoặc commit):
+
+```powershell
+$env:HQ_SIM_API_KEY = "PASTE_GATEWAY_API_KEY"
+$queue = Join-Path $env:TEMP "hqtcsdl-sim-queue.json"
+
+uv --project backend run python -m tools.gateway_simulator.cli --state $queue enqueue --device-id NODE-SIM-01 --boot-id 1 --seq 1
+uv --project backend run python -m tools.gateway_simulator.cli --state $queue enqueue --device-id NODE-SIM-01 --boot-id 1 --seq 2
+uv --project backend run python -m tools.gateway_simulator.cli --state $queue enqueue --device-id NODE-SIM-02 --boot-id 1 --seq 1
+
+uv --project backend run python -m tools.gateway_simulator.cli --state $queue sync --base-url http://127.0.0.1:8000 --gateway-id GW-SIM-01
+uv --project backend run python -m tools.gateway_simulator.cli --state $queue status
+Remove-Item Env:HQ_SIM_API_KEY
+```
+
+Kết quả mong đợi: `http_status=200`, số bản ghi được giải phóng khỏi queue; `pending=0`, `quarantine=0`. Mẫu Simulator có đủ **5 đại lượng**; lệnh `sync` chỉ gửi **một batch** từ queue. Muốn tạo thêm bản ghi, tăng `seq` (giữ `boot-id`) hoặc dùng boot mới; không tái sử dụng cùng identity với dữ liệu khác.
+
+### 8. Kiểm tra trên Web
+
+Chọn **`FARM-01` trong bộ chọn Farm ở Topbar** (Web không tự chọn Farm đầu tiên), sau đó:
+
+| Trang | Kiểm tra |
+| --- | --- |
+| **Tổng quan** (`/dashboard`) | Danh sách Node, số đo mới nhất, freshness; chỉ số cảnh báo vẫn “Chờ G4” |
+| **Dữ liệu đo** (`/measurements`) | Chọn Node, xem 5 chỉ số và lịch sử các `seq` đã gửi |
+| **Báo cáo** (`/reports`) | Chọn Node/khoảng thời gian chứa số đo vừa gửi → **Tạo báo cáo** → **Xuất CSV** |
+| **Thiết bị & Khóa** (`/devices`) | Xem hồ sơ Node/Gateway, liên kết Gateway và danh sách credential |
+
+Báo cáo mặc định truy vấn dữ liệu theo **giờ đo hợp lệ** (`t_node`). Các số đo tạo bằng Simulator với `time_status=VALID` có thể xuất hiện trong báo cáo; số đo `UNKNOWN` được truy vấn riêng và không đưa vào thống kê này.
+
+## Kiểm tra nhanh & lưu ý
+
+Từ `backend/`:
+
+```powershell
+uv run ruff check .
+uv run pytest
+```
+
+Từ `frontend/`:
+
+```powershell
 npm test
 npm run typecheck
 npm run build
 ```
 
-`npm ci`/`uv sync --locked` dùng lockfile đã commit; thay dependency cần cập nhật lock
-trong cùng PR. Workflow CI có chạy các kiểm tra này. SQL auth/M2 tests cần opt-in
-trên DB test đã chọn; CI thông thường không kiểm SQL Server thật hoặc hardware.
+- `/health/ready` trả `503`: kiểm SQL Server/ODBC Driver 18, tên instance, mật khẩu và `HQ_DATABASE_URL`.
+- Migrate lỗi: kiểm `HQ_MIGRATION_DATABASE_URL` và quyền migration; **không dùng `alembic stamp head` để bỏ qua lỗi**.
+- Đăng nhập lỗi: kiểm Admin đã được tạo trên đúng DB, `HQ_CSRF_SECRET` và `HQ_WEB_ORIGIN`.
+- Simulator trả `401/403`: kiểm API key, mã Gateway trùng hồ sơ, key chưa bị thu hồi; bản ghi bị từ chối: kiểm Node đã liên kết Gateway, quyền nhận và mã Node.
+- Thay `backend/.env` cần **restart Backend**. Queue Simulator nằm trong thư mục TEMP local, không phải seed SQL hay dữ liệu thiết bị thật.
 
-FE không kiểm tra phiên chỉ vì chuyển tab/focus. Phiên được kiểm tra lúc mở ứng
-dụng hoặc khi chủ động bấm Kiểm tra phiên; Backend xác thực từng request được bảo
-vệ, FE xóa dữ liệu riêng khi nhận 401 và có timer hết hạn. Phiên bị thu hồi ở nơi
-khác chỉ được phát hiện khi có request tiếp theo hoặc kiểm tra phiên thủ công.
-FE giữ form và version hồ sơ khi xác minh lại cùng phiên. Trong
-lúc xác minh hoặc sau lỗi mạng/503, Lưu bị khóa; dùng **Kiểm tra phiên** để thử lại.
-401/hết hạn/logout/đổi phiên xóa dữ liệu riêng. Sau mất phản hồi mutation, giữ form
-để đối chiếu; không tự retry ghi hoặc dùng version mới để ghi đè. Xem
-[cách test hai tab và phiên](docs/development.md#t05t06--cấu-hình-và-tài-khoản-quản-trị).
+## Cấu trúc source
 
-Test unit/fetch giả lập và build không thay nghiệm thu trình duyệt, SQL rollback,
-hai kết nối đồng thời, snapshot/pool và logout/write race. Không diễn giải test
-đã có thành toàn bộ AC/NFR đạt; ghi riêng môi trường, lệnh/kết quả và phần chưa chạy.
+```text
+backend/          FastAPI, module nghiệp vụ, Alembic, test
+frontend/         React/Vite: đăng nhập, quản trị, Dashboard, dữ liệu, báo cáo
+database/         Seed nền tảng và SQL Server
+tools/            Gateway Simulator CLI
+docs/             Ghi chú phát triển, thiết kế UI và kết quả kiểm chứng
+```
 
-## Đối chiếu code và tài liệu SDLC
-
-| Nội dung cần đối chiếu | Source | Kiểm chứng hiện có |
-| --- | --- | --- |
-| Auth/session/CSRF | [Backend auth](backend/app/modules/auth), [FE auth](frontend/src/features/auth) | [API/auth tests](backend/tests/test_auth.py), [session FE tests](frontend/tests/auth-session.test.mjs) |
-| Khu vực, hồ sơ & khóa | [Backend areas](backend/app/modules/areas), [Backend devices](backend/app/modules/devices), [FE areas/devices](frontend/src/features) | [Areas/Devices/Credentials/Metrics tests](backend/tests), [SQL G1 opt-in](backend/tests/test_sql_g1.py), [G1 FE tests](frontend/tests/g1-admin.test.mjs) |
-| Ingestion, ACK2 & Simulator | [Backend ingestion](backend/app/modules/ingestion), [Gateway simulator](tools/gateway_simulator) | [Canonical/API/Simulator tests](backend/tests), [SQL G2 opt-in](backend/tests/test_sql_g2.py), [G2 validation](docs/g2-ingestion-validation.md) |
-| M1/M2/PR-A và CSDL | [Migrations](backend/migrations/versions), [hướng dẫn CSDL](database/README.md) | [DDL offline](backend/tests/test_m2_migration.py), [PR-A tests](backend/tests/test_farm_zone_lifecycle_migration.py), [SQL opt-in](backend/tests/test_sql_auth_m2.py) |
-| Request cũ/401/lỗi mạng | [FE client](frontend/src/api/client.ts) | [Client tests](frontend/tests/api-client.test.mjs) |
-
-Các thiết kế Confluence bên dưới là nguồn nghiệp vụ; README mô tả phạm vi code
-và đường dẫn kiểm chứng, không tự sửa contract đã chốt. API đang đăng ký có thể
-xem ở `/docs` và `/openapi.json` của Backend. Bằng chứng nền tảng lịch sử ở
-[foundation-validation](docs/foundation-validation.md) không thay kết quả nghiệm
-thu FL-02/FL-03 mới; cần lưu bằng chứng mới khi cập nhật SDLC.
-
-## Bản build phục vụ cùng Backend
-
-Chạy `npm run build` ở `frontend`, rồi chạy Backend như trên. Mở
-http://127.0.0.1:8000; FastAPI phục vụ `frontend/dist`. Với máy demo LAN, thay host bằng
-`0.0.0.0`, cấu hình firewall và IP theo mục 06. Một API process; không dùng reload
-trong demo. Hiện chưa có monitoring worker.
-
-Đọc [hướng dẫn môi trường](docs/development.md), [quy trình nhóm](CONTRIBUTING.md),
-[quy ước CSDL](database/README.md) và [bằng chứng kiểm tra](docs/foundation-validation.md).
-
-## Thiết kế áp dụng
-
-- [03.3 — Kiến trúc](https://bengame2006.atlassian.net/wiki/spaces/HQTCSDL/pages/14188568)
-- [03.4 — CSDL chung](https://bengame2006.atlassian.net/wiki/spaces/HQTCSDL/pages/14352390)
-- [03.5 — Thiết kế luồng](https://bengame2006.atlassian.net/wiki/spaces/HQTCSDL/pages/14319653)
-- [03.6 — Nền tảng và quy trình](https://bengame2006.atlassian.net/wiki/spaces/HQTCSDL/pages/14647366)
-- [03.1 — Contract Gateway–Backend](https://bengame2006.atlassian.net/wiki/spaces/HQTCSDL/pages/13729794)
-
-PR #10 đã đưa vào `develop` WebModel strict/cấm trường lạ, UTC clock millisecond,
-lỗi web/validation có request ID và M1/seed. T05/T06 bổ sung login/session/logout,
-CSRF và màn hình xác thực; response auth thành công/lỗi đều `no-store`.
-Helper ID/Decimal/rowversion bổ sung theo từng luồng,
-chưa phải bộ codec đầy đủ của draft PR #9 (đã đóng, không merge).
-
-Source có M2 `b15e2c03a001` (tổng 15 bảng nghiệp vụ), chưa có M3/ACK2/worker hoặc
-dashboard nghiệp vụ. Việc DB đã áp revision và Admin đã tồn tại phải kiểm riêng;
-không tự tạo tài khoản hoặc migrate lúc startup. Xem [cấu hình auth và lệnh tạo Admin](docs/development.md#t05t06--cấu-hình-và-tài-khoản-quản-trị).
-Không dùng trang khởi động hoặc test mock làm bằng chứng đạt AC/NFR.
+**Nhánh phát triển:** `develop`; thay đổi đi qua Pull Request. `main` dành cho phiên bản đã tích hợp/được duyệt.
