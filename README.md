@@ -8,7 +8,7 @@ Code cũ đã lưu tại `archive/legacy-before-foundation`; khung này bắt đ
 | --- | --- |
 | `backend/app/core` | Cấu hình, DB/session, lỗi và log dùng chung |
 | `backend/app/modules` | Module theo 03.3; thêm theo luồng đã review |
-| `backend/migrations` | Alembic; M1 8 bảng nền tảng, M2 thêm 7 bảng đo/config/runtime |
+| `backend/migrations` | Alembic migrations cho dữ liệu nền tảng, số đo, cấu hình, cảnh báo và audit |
 | `backend/tests` | Unit/API giả lập, SQL migration offline và SQL auth/M2 opt-in |
 | `frontend/src` | React: `app`, `api`, `features` |
 | `database` | Hướng dẫn CSDL và `seed_foundation.sql` (Farm/Zone/Metric) |
@@ -22,14 +22,14 @@ Code cũ đã lưu tại `archive/legacy-before-foundation`; khung này bắt đ
 | FL-02 — Khu vực | CRUD & vòng đời `archive`/`restore` Farm/Zone trên SQL Server (`/api/v1/farms`, `/zones`), adapter `/api/v1/context?farm_id={id}` | Archive bị chặn (`409 AREA_IN_USE`) nếu còn thiết bị bật quyền; tắt quyền thuộc FL-04 (G4) |
 | FL-03 — Hồ sơ & Khóa | Tạo/list/detail/PATCH Node/Gateway (chọn `farm_id`/`zone_id` từ DB); cấp/xem/thu hồi Gateway Credential (tối đa 2 active); `GET /api/v1/metrics` | Không ghép/chuyển/xóa thiết bị hoặc bật/tắt quyền (FL-04 thuộc G4) |
 | FL-06 — Ingestion & Simulator | `POST /api/v1/ingestion/measurements` (`X-API-Key`, D04/D05/D06, Canonical-v1, per-record Tx, ACK2, `NodeRuntime`/`EvaluationState`) và Gateway Simulator CLI (`tools/gateway_simulator`) | Simulator kiểm chứng hợp đồng phần mềm, không thay ESP32/LoRa HMAC/Flash-SD thật (`FL-05`); chưa có worker đánh giá (`G4`) |
-| M1/M2 và PR-A — CSDL | 15 bảng nghiệp vụ; PR-A (`fee0fa015af7`) thêm `archived_at`/`row_ver` cho Farm/Zone | Chưa có M3 (episode/audit) hay monitoring worker (thuộc G4) |
+| M1/M2, PR-A và M3 — CSDL | [M3](database/README.md#ap-m3) (`d6b3a5f09c42`) nâng tổng số bảng nghiệp vụ lên 19 | M3 là schema chuẩn bị cho giám sát và cảnh báo G4 |
 
 Node mới chưa gắn Gateway vẫn là hồ sơ hợp lệ, hiển thị **Chưa liên kết Gateway**.
 Tạo hồ sơ không đợi phần cứng và không chứng minh thiết bị online. Chưa có bản đo
 thì mốc cuối lưu là null; không tự tạo số đo, ngưỡng hoặc period giả.
 
-Source hiện tại chưa có M3, bật/tắt quyền nhận (FL-04),
-API xem số đo (FL-07), cấu hình giám sát (FL-08), worker cảnh báo (FL-09/10/11), dashboard hoặc báo cáo nghiệp vụ (FL-12/13). Trạng thái
+Các luồng còn lại của G4 gồm bật/tắt quyền nhận (FL-04), cấu hình giám sát
+(FL-08), worker và quản lý cảnh báo (FL-09/10/11), cùng phần giám sát của Dashboard (FL-12). Trạng thái
 source trong checkout này không chứng minh tính năng đã merge, đã áp lên mọi DB
 hoặc đã nghiệm thu đầy đủ AC/NFR.
 
@@ -253,7 +253,7 @@ CSRF và màn hình xác thực; response auth thành công/lỗi đều `no-sto
 Helper ID/Decimal/rowversion bổ sung theo từng luồng,
 chưa phải bộ codec đầy đủ của draft PR #9 (đã đóng, không merge).
 
-Source có M2 `b15e2c03a001` (tổng 15 bảng nghiệp vụ), chưa có M3/ACK2/worker hoặc
-dashboard nghiệp vụ. Việc DB đã áp revision và Admin đã tồn tại phải kiểm riêng;
+Source có M2 cho dữ liệu đo/cấu hình và M3 cho schema cảnh báo/audit.
+Việc DB đã áp revision và Admin đã tồn tại phải kiểm riêng;
 không tự tạo tài khoản hoặc migrate lúc startup. Xem [cấu hình auth và lệnh tạo Admin](docs/development.md#t05t06--cấu-hình-và-tài-khoản-quản-trị).
 Không dùng trang khởi động hoặc test mock làm bằng chứng đạt AC/NFR.

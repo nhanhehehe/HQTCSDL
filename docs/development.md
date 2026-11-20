@@ -198,8 +198,9 @@ Thực hiện [hướng dẫn M1/seed](../database/README.md#ap-m1-va-seed): xá
 và login migration → heads/current → xem SQL → upgrade → kiểm 9 bảng/revision →
 seed SSMS → kiểm chạy lại 1/2/5. Downgrade xóa dữ liệu, chỉ kiểm trên DB test được
 phép bỏ dữ liệu. Source có M1, M2 và [PR-A Farm/Zone](../database/README.md#pr-a--cột-vòng-đời-farmzone)
-(`fee0fa015af7` sau M2); M3 chưa triển khai. PR-A chỉ thêm bốn cột, không chuyển đổi
-manifest hoặc API. [Bằng chứng kiểm thử PR-A](farm-zone-lifecycle-validation.md) tách
+(`fee0fa015af7` sau M2) và [M3](../database/README.md#ap-m3) (`d6b3a5f09c42`).
+PR-A chỉ thêm bốn cột, không chuyển đổi manifest hoặc API.
+[Bằng chứng kiểm thử PR-A](farm-zone-lifecycle-validation.md) tách
 offline tests khỏi upgrade SQL thật và các ca chưa chạy. Không tự áp migration lúc API
 khởi động; không chạy `create_all()` thay versioning.
 
