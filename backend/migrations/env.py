@@ -7,7 +7,7 @@ from app.core.db import Base
 # Import reviewed module models here when their migrations are added.
 target_metadata = Base.metadata
 settings = Settings()
-secret = settings.migration_database_url or settings.database_url
+secret = settings.migration_database_url
 if secret is None:
     raise RuntimeError("Configure HQ_MIGRATION_DATABASE_URL before running Alembic")
 url = secret.get_secret_value()
