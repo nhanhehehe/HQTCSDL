@@ -463,3 +463,46 @@ Nhóm G3 giữ nguyên Alembic head `fee0fa015af7` (không thêm migration hay b
   Remove-Item Env:HQ_EXPECT_TEST_DATABASE
   ```
 - Giới hạn kiểm chứng: bộ test offline và SQL Server thật không thay cho kiểm tra thủ công trên trình duyệt (điều hướng `/dashboard`, `/measurements`, `/reports`, filter, copy/phân trang, hết phiên) và mở file CSV UTF-8 BOM thực tế trên Excel / Google Sheets / LibreOffice Calc. Xem tổng hợp kết quả tại [g3-query-display-reports-validation.md](g3-query-display-reports-validation.md).
+
+## FL-04 / FL-08 / FL-09 / FL-10 / FL-11 / FL-12 (G4) — Giám sát, Worker nền và Cảnh báo
+
+Nhóm G4 nâng Alembic head lên `e7c4b6a10d53` (sau M3 `d6b3a5f09c42`, xem [database/README.md](../database/README.md#ap-m3)) để bổ sung bảng cảnh báo/audit (`AlertEpisode`, `AlertRevision`, `AlertAcknowledgement`, `AlertReplacement`) và cho phép cấu hình ngưỡng 5 đại lượng với độ phân giải `DECIMAL(9,2)` theo `G4-D03`.
+
+- **Biến môi trường worker nền G4 trong `backend/.env`:**
+  - `HQ_MONITORING_ENABLED`: mặc định `false`. Chỉ bật `true` trên một tiến trình Backend đơn lẻ khi muốn kích hoạt worker đánh giá ngưỡng (`FL-09`) và timeout (`FL-10`); mọi instance khác hoặc worker song song dùng `sp_getapplock` theo session để cô lập quyền thực thi.
+  - `HQ_MONITORING_TICK_SECONDS`: chu kỳ tick worker (giây dương, mặc định `5`).
+  - `HQ_MONITORING_RETRY_SECONDS`: thời gian giãn cách thử lại khi một Node gặp lỗi engine (giây dương, mặc định `15`).
+  - `HQ_MONITORING_SHUTDOWN_TIMEOUT_SECONDS`: thời gian chờ tối đa khi dừng worker gọn lúc shutdown API (giây dương, mặc định `30`).
+  - `HQ_MONITORING_COMMAND_TIMEOUT_SECONDS`: giới hạn timeout truy vấn worker (giây dương, mặc định `15`).
+  - `HQ_MONITORING_LOCK_TIMEOUT_MS`: timeout chờ `sp_getapplock` trên SQL Server (mili-giây dương, mặc định `5000`).
+  - Lưu ý `pyodbc.pooling = False` được cấu hình ở tầng engine để kết nối đóng/đứt giải phóng ngay SPID và session applock trên Windows ODBC/SQL Server.
+- **Tóm tắt hành vi G4 đã triển khai:**
+  - **Quyền tiếp nhận (`FL-04`):** `PATCH /api/v1/nodes/{id}/receiving` và `PATCH /api/v1/gateways/{id}/receiving` khóa và cập nhật `Node` / `Gateway` nguyên tử kèm `expected_row_version`. Khi tắt quyền nhận mới, Backend chặn lưu bản đo mới, đóng `MonitoringPeriod` đang mở (`RECEIVING_DISABLED`) và chuyển trạng thái giám sát sang tạm dừng (`PAUSED`), trong khi episode ngưỡng `OPEN` hiện có được giữ nguyên ở trạng thái tạm dừng cho tới khi bật lại hoặc có bằng chứng phục hồi.
+  - **Cấu hình ngưỡng & timeout (`FL-08`):** `GET/PATCH /api/v1/nodes/{id}/monitoring` hỗ trợ cập nhật riêng hoặc nguyên tử nhóm ngưỡng 5 đại lượng và `timeout_minutes` với optimistic concurrency (`expected_threshold_config_id` / `expected_timeout_config_id`), giữ nguyên chuỗi số thập phân `DECIMAL(9,2)` không qua binary float (`G4-D07`) và chỉ khóa thay đổi `T` khi `PROFILE_MISSING`.
+  - **Đánh giá & đối soát nền (`FL-09`, `FL-10`):** Worker chạy định kỳ trên các Node cần xử lý: hoàn tất `PERIOD_END -> CONFIG -> PERIOD_START -> SAMPLE` tại cùng mốc thời gian, giữ lineage `AlertReplacement` (`SPLIT`/`MERGE`/`REWRITE`/`REPLACED`) kèm snapshot checkpoint khi replay lịch sử, chỉ chốt `completed_generation` và xóa cờ `full_replay_required`/`replay_from_t_node` sau khi cả hai engine đều xong và `desired_generation` còn khớp. `/health/live` phản ánh trạng thái worker qua trường `monitoring` (`disabled|starting|running|lock_unavailable|schema_missing|dead`).
+  - **Truy vấn & xác nhận cảnh báo (`FL-11`, `FL-12`):** `GET /api/v1/alerts` (`farm_id` bắt buộc, không lọc `metric_code`), `GET /api/v1/alerts/{id}` (tra cứu toàn cục cả episode retired, lazy audit theo `audit_kind=revisions|acknowledgements|replacements`, tra cứu exact `acknowledgement_version`), `POST /api/v1/alerts/{id}/acknowledgements`, và `GET /api/v1/dashboard?farm_id=<id>` bật `capabilities: { monitoring: true, alerts: true }` với feed cảnh báo toàn Farm không phụ thuộc Node đang chọn ở cột trái.
+
+### Kiểm thử offline và SQL Server cho G4
+
+- Offline Backend (từ `backend/`):
+  ```powershell
+  uv run ruff check .
+  uv run ruff format --check .
+  uv run pytest -v
+  ```
+- Offline Frontend (từ `frontend/`):
+  ```powershell
+  npm run typecheck
+  npm test
+  npm run build
+  ```
+- SQL Server thật opt-in trên DB test disposable đã lên `e7c4b6a10d53` (từ `backend/`):
+  Tất cả bộ `test_sql_g3.py` và `test_sql_g4_*.py` đọc **duy nhất** `HQ_AUTH_TEST_DATABASE_URL` và đối chiếu tên DB với `HQ_EXPECT_TEST_DATABASE`:
+  ```powershell
+  $env:HQ_RUN_SQL_TESTS = '1'
+  $env:HQ_EXPECT_TEST_DATABASE = 'HQTCSDL_test_ten'
+  uv run pytest tests/test_sql_g4_monitoring.py tests/test_sql_g4_replay.py tests/test_sql_g4_worker.py tests/test_sql_g4_api.py tests/test_sql_g3.py -v
+  Remove-Item Env:HQ_RUN_SQL_TESTS
+  Remove-Item Env:HQ_EXPECT_TEST_DATABASE
+  ```
+- Tổng hợp bằng chứng kiểm chứng và các hạng mục chưa chạy xem tại [g4-monitoring-alerts-validation.md](g4-monitoring-alerts-validation.md).
