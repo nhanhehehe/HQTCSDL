@@ -8,6 +8,10 @@ const formatSource = await readFile(
   new URL('../src/features/measurements/format.ts', import.meta.url),
   'utf8',
 )
+const chartDataSource = await readFile(
+  new URL('../src/features/measurements/chartData.ts', import.meta.url),
+  'utf8',
+)
 const scopeLoaderSource = await readFile(
   new URL('../src/features/measurements/scopeLoader.ts', import.meta.url),
   'utf8',
@@ -35,10 +39,14 @@ function moduleUrl(source) {
 async function loadG3Modules() {
   const clientUrl = moduleUrl(clientSource)
   const formatUrl = moduleUrl(formatSource)
+  const chartDataUrl = moduleUrl(
+    chartDataSource.replace("'./format'", JSON.stringify(formatUrl)),
+  )
   const scopeUrl = moduleUrl(scopeLoaderSource.replace("'../../api/client'", JSON.stringify(clientUrl)))
   const measUrl = moduleUrl(
     measStoreSource
       .replace("'../../api/client'", JSON.stringify(clientUrl))
+      .replace("'./chartData'", JSON.stringify(chartDataUrl))
       .replace("'./format'", JSON.stringify(formatUrl))
       .replace("'./scopeLoader'", JSON.stringify(scopeUrl)),
   )
@@ -56,10 +64,11 @@ async function loadG3Modules() {
 
   const client = await import(clientUrl)
   const format = await import(formatUrl)
+  const chartData = await import(chartDataUrl)
   const meas = await import(measUrl)
   const dash = await import(dashUrl)
   const reports = await import(reportsUrl)
-  return { ...client, ...format, ...meas, ...dash, ...reports }
+  return { ...client, ...format, ...chartData, ...meas, ...dash, ...reports }
 }
 
 test('format helpers keep fixed 5-metric order and explicit UTC+07:00 conversion', async () => {
@@ -417,6 +426,278 @@ test('ReportsStore enforces draft vs result dirty lock, 410 manual retry, and st
     assert.equal(csvRes, null)
     assert.equal(createCalls, callsBeforeExport)
     assert.match(store.getSnapshot().exportError, /410 SNAPSHOT_EXPIRED/)
+  } finally {
+    store.dispose()
+    globalThis.fetch = realFetch
+  }
+})
+
+test('chartData preserves zero values, keeps sensor errors as null gaps, marks isolated points, and escapes tooltip HTML', async () => {
+  const {
+    buildMetricSeries,
+    computeLoadedTimeSpan,
+    formatChartAxisTimeVi,
+    formatMetricTooltipHtml,
+    escapeHtml,
+    DEFAULT_CHART_PAGE_SIZE,
+  } = await loadG3Modules()
+
+  assert.equal(DEFAULT_CHART_PAGE_SIZE, 50)
+
+  const makeMetrics = overrides => ({
+    temperature: { value: '25.5', status: 'OK', unit: '°C' },
+    airHumidity: { value: '70', status: 'OK', unit: '%RH' },
+    pressure: { value: '1012.25', status: 'OK', unit: 'hPa' },
+    light: { value: '0', status: 'OK', unit: 'lux' },
+    soilMoisture: { value: null, status: 'READ_ERROR', unit: '% tương đối' },
+    ...overrides,
+  })
+
+  const points = [
+    {
+      identity: { device_id: 'NODE-01', boot_id: '1', seq: '1' },
+      event_time: '2026-11-15T01:00:00.000Z',
+      measurements: makeMetrics({
+        soilMoisture: { value: '42.5', status: 'OK', unit: '% tương đối' },
+      }),
+    },
+    {
+      identity: { device_id: 'NODE-01', boot_id: '1', seq: '2' },
+      event_time: '2026-11-15T01:05:00.000Z',
+      measurements: makeMetrics({
+        light: { value: null, status: 'INVALID_VALUE', unit: 'lux' },
+        soilMoisture: { value: null, status: 'READ_ERROR', unit: '% tương đối' },
+      }),
+    },
+    // Same event_time with distinct boot_id/seq -> both points must be preserved
+    {
+      identity: { device_id: 'NODE-01', boot_id: '1', seq: '3' },
+      event_time: '2026-11-15T01:10:00.000Z',
+      measurements: makeMetrics({
+        light: { value: '0', status: 'OK', unit: 'lux' },
+        soilMoisture: { value: '50', status: 'OK', unit: '% tương đối' },
+      }),
+    },
+    {
+      identity: { device_id: 'NODE-01', boot_id: '2', seq: '1' },
+      event_time: '2026-11-15T01:10:00.000Z',
+      measurements: makeMetrics({
+        light: { value: '120', status: 'OK', unit: 'lux' },
+        soilMoisture: { value: null, status: 'READ_ERROR', unit: '% tương đối' },
+      }),
+    },
+  ]
+
+  const lightSeries = buildMetricSeries(points, 'light')
+  assert.equal(lightSeries.data.length, 4)
+  assert.equal(lightSeries.validCount, 3)
+  assert.equal(lightSeries.errorCount, 1)
+  assert.equal(lightSeries.minValue, '0')
+  assert.equal(lightSeries.maxValue, '120')
+  // Zero preserved as 0, INVALID_VALUE stays strictly null
+  assert.equal(lightSeries.data[0].value[1], 0)
+  assert.equal(lightSeries.data[1].value[1], null)
+  assert.equal(lightSeries.data[2].value[1], 0)
+  assert.equal(lightSeries.data[3].value[1], 120)
+  // First point is isolated (index 0 followed by null at index 1)
+  assert.equal(lightSeries.data[0].isIsolated, true)
+  assert.equal(lightSeries.data[2].isIsolated, false)
+
+  const soilSeries = buildMetricSeries(points, 'soilMoisture')
+  assert.equal(soilSeries.unit, '% tương đối')
+  assert.equal(soilSeries.data[0].isIsolated, true)
+  assert.equal(soilSeries.data[2].isIsolated, true)
+  assert.equal(soilSeries.data[3].value[1], null)
+
+  const span = computeLoadedTimeSpan(points)
+  assert.equal(span.spanMs, 10 * 60 * 1000)
+  assert.equal(formatChartAxisTimeVi(Date.parse('2026-11-15T01:00:00.000Z'), span.spanMs), '08:00:00')
+  assert.equal(
+    formatChartAxisTimeVi(Date.parse('2026-11-15T01:00:00.000Z'), 2 * 60 * 60 * 1000),
+    '08:00',
+  )
+  assert.equal(
+    formatChartAxisTimeVi(Date.parse('2026-11-15T01:00:00.000Z'), 36 * 60 * 60 * 1000),
+    '15/11\n08:00',
+  )
+
+  assert.equal(escapeHtml('<img src=x onerror="1">'), '&lt;img src=x onerror=&quot;1&quot;&gt;')
+  const tooltipHtml = formatMetricTooltipHtml(soilSeries, [soilSeries.data[2], soilSeries.data[3]])
+  assert.match(tooltipHtml, /Boot 1 \/ Seq 3/)
+  assert.match(tooltipHtml, /Boot 2 \/ Seq 1/)
+  assert.match(tooltipHtml, /50 % tương đối/)
+  assert.match(tooltipHtml, /Lỗi cảm biến/)
+})
+
+test('MeasurementsStore shares view_token between table and chart, supports reduced page_size, batch paging, and abort on filter/mode reset', async () => {
+  const { MeasurementsStore } = await loadG3Modules()
+  const realFetch = globalThis.fetch
+  const store = new MeasurementsStore()
+  const requested = []
+
+  const pt = (seq, iso) => ({
+    identity: { device_id: 'NODE-01', boot_id: '1', seq: String(seq) },
+    event_time: iso,
+    measurements: {
+      temperature: { value: '26', status: 'OK', unit: '°C' },
+      airHumidity: { value: '70', status: 'OK', unit: '%RH' },
+      pressure: { value: '1010', status: 'OK', unit: 'hPa' },
+      light: { value: '0', status: 'OK', unit: 'lux' },
+      soilMoisture: { value: '45', status: 'OK', unit: '% tương đối' },
+    },
+  })
+
+  try {
+    globalThis.fetch = async url => {
+      requested.push(url)
+      if (url === '/api/v1/nodes/1/measurements?time_mode=known&page_size=50') {
+        return new Response(
+          JSON.stringify({
+            state: 'AVAILABLE',
+            items: [{ id: '10' }],
+            next_cursor: null,
+            view_token: 'vt-shared-1',
+            range: { from: '2026-11-14T10:00:00.000Z', to: '2026-11-15T10:00:00.000Z' },
+            as_of: '2026-11-15T10:00:00.000Z',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url === '/api/v1/nodes/1/measurements/chart?page_size=50&view_token=vt-shared-1') {
+        return new Response(
+          JSON.stringify({
+            state: 'AVAILABLE',
+            points: [pt(1, '2026-11-15T08:00:00.000Z')],
+            next_cursor: 'cur-c-2',
+            view_token: 'vt-shared-1',
+            range: { from: '2026-11-14T10:00:00.000Z', to: '2026-11-15T10:00:00.000Z' },
+            as_of: '2026-11-15T10:00:00.000Z',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (
+        url ===
+        '/api/v1/nodes/1/measurements/chart?page_size=50&cursor=cur-c-2&view_token=vt-shared-1'
+      ) {
+        return new Response(
+          JSON.stringify({
+            state: 'AVAILABLE',
+            points: [pt(2, '2026-11-15T08:05:00.000Z')],
+            next_cursor: 'cur-c-3',
+            view_token: 'vt-shared-1',
+            range: { from: '2026-11-14T10:00:00.000Z', to: '2026-11-15T10:00:00.000Z' },
+            as_of: '2026-11-15T10:00:00.000Z',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (
+        url ===
+        '/api/v1/nodes/1/measurements/chart?page_size=50&cursor=cur-c-3&view_token=vt-shared-1'
+      ) {
+        return new Response(
+          JSON.stringify({
+            state: 'AVAILABLE',
+            points: [pt(3, '2026-11-15T08:10:00.000Z')],
+            next_cursor: null,
+            view_token: 'vt-shared-1',
+            range: { from: '2026-11-14T10:00:00.000Z', to: '2026-11-15T10:00:00.000Z' },
+            as_of: '2026-11-15T10:00:00.000Z',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url === '/api/v1/nodes/1/measurements/chart?page_size=20&view_token=vt-shared-1') {
+        return new Response(
+          JSON.stringify({
+            state: 'AVAILABLE',
+            points: [pt(1, '2026-11-15T08:00:00.000Z')],
+            next_cursor: null,
+            view_token: 'vt-shared-1',
+            range: { from: '2026-11-14T10:00:00.000Z', to: '2026-11-15T10:00:00.000Z' },
+            as_of: '2026-11-15T10:00:00.000Z',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url === '/api/v1/nodes/2/measurements/chart?page_size=20') {
+        return new Response(
+          JSON.stringify({
+            state: 'AVAILABLE',
+            points: [pt(10, '2026-11-15T09:00:00.000Z')],
+            next_cursor: null,
+            view_token: 'vt-chart-first',
+            range: { from: '2026-11-14T09:00:00.000Z', to: '2026-11-15T09:00:00.000Z' },
+            as_of: '2026-11-15T09:00:00.000Z',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      if (url === '/api/v1/nodes/2/measurements?time_mode=known&page_size=50&view_token=vt-chart-first') {
+        return new Response(
+          JSON.stringify({
+            state: 'AVAILABLE',
+            items: [{ id: '99' }],
+            next_cursor: null,
+            view_token: 'vt-chart-first',
+            range: { from: '2026-11-14T09:00:00.000Z', to: '2026-11-15T09:00:00.000Z' },
+            as_of: '2026-11-15T09:00:00.000Z',
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        )
+      }
+      throw new Error(`Unexpected URL: ${url}`)
+    }
+
+    // 1. Table loads first -> Chart reuses vt-shared-1 without resending from/to
+    store.setNodeId('1')
+    await store.loadHistory(false)
+    assert.equal(store.getSnapshot().history.viewToken, 'vt-shared-1')
+
+    await store.loadChart(false)
+    assert.equal(store.getSnapshot().chart.viewToken, 'vt-shared-1')
+    assert.deepEqual(
+      store.getSnapshot().chart.points.map(p => p.identity.seq),
+      ['1'],
+    )
+
+    // 2. Batch paging loads remaining 2 pages cleanly in ASC order
+    await store.loadChartBatch(5)
+    assert.deepEqual(
+      store.getSnapshot().chart.points.map(p => p.identity.seq),
+      ['1', '2', '3'],
+    )
+    assert.equal(store.getSnapshot().chart.nextCursor, null)
+    assert.equal(store.getSnapshot().chart.loadingBatch, false)
+
+    // 3. Reducing page_size resets chart slice but preserves shared view_token for reload
+    store.setChartPageSize(20)
+    assert.equal(store.getSnapshot().chart.pageSize, 20)
+    assert.equal(store.getSnapshot().chart.points.length, 0)
+    assert.equal(store.getSnapshot().history.viewToken, 'vt-shared-1')
+    await store.loadChart(false)
+    assert.equal(store.getSnapshot().chart.points.length, 1)
+
+    // 4. Direct Chart entry (?tab=chart) captures vt-chart-first -> Table reuses vt-chart-first
+    store.setNodeId('2', { viewTab: 'chart' })
+    await store.loadChart(false)
+    assert.equal(store.getSnapshot().history.viewToken, 'vt-chart-first')
+    assert.equal(store.getSnapshot().chart.viewToken, 'vt-chart-first')
+
+    store.setViewTab('table')
+    await store.loadHistory(false, { reuseViewToken: true })
+    assert.deepEqual(
+      store.getSnapshot().history.items.map(i => i.id),
+      ['99'],
+    )
+
+    // 5. Switching to unknown clears chart slice and resets viewTab to table
+    store.setTimeMode('unknown')
+    assert.equal(store.getSnapshot().history.viewTab, 'table')
+    assert.equal(store.getSnapshot().chart.points.length, 0)
+    assert.equal(store.getSnapshot().chart.viewToken, null)
+    assert.equal(requested.length, 7)
   } finally {
     store.dispose()
     globalThis.fetch = realFetch
