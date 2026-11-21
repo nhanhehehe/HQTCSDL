@@ -18,10 +18,11 @@ def application(tmp_path):
 def test_liveness_is_separate_from_database_readiness(application):
     with TestClient(application) as client:
         assert client.get("/health/live").json()["status"] == "alive"
+        assert client.get("/health/live").json()["monitoring"] == "disabled"
         result = client.get("/health/ready")
         assert result.status_code == 503
         assert result.json()["checks"]["database"] == "unavailable"
-        assert result.json()["monitoring"] == "not_implemented"
+        assert result.json()["monitoring"] == "disabled"
 
 
 def test_probe_failure_does_not_leak_credentials(application, monkeypatch):

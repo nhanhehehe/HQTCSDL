@@ -21,6 +21,7 @@ from app.core.errors import (
     validation_error,
     web_error,
 )
+from app.modules.alerts.worker import MonitoringWorker
 from app.modules.areas.router import router as areas_router
 from app.modules.areas.service import AreaService
 from app.modules.auth.router import router as auth_router
@@ -43,16 +44,22 @@ logger = logging.getLogger("uvicorn.error.hqtcsdl")
 def create_app(settings: Settings | None = None, frontend_dir: Path | None = None) -> FastAPI:
     settings = settings if settings is not None else Settings()
     database = Database(settings)
+    worker = MonitoringWorker(database, settings)
     static_dir = (frontend_dir or BACKEND_DIR.parent / "frontend" / "dist").resolve()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        yield
-        database.dispose()
+        worker.start()
+        try:
+            yield
+        finally:
+            worker.stop()
+            database.dispose()
 
     app = FastAPI(title="HQTCSDL", version="0.1.0", lifespan=lifespan)
     app.state.database = database
     app.state.settings = settings
+    app.state.monitoring_worker = worker
     app.state.auth = AuthService(database, settings)
     app.state.areas = AreaService(database, settings)
     app.state.devices = DeviceService(database, settings)
@@ -91,10 +98,15 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
 
     @app.get("/health/live")
     def live():
-        return {"status": "alive", "scope": "foundation", "monitoring": "not_implemented"}
+        return {
+            "status": "alive",
+            "scope": "foundation",
+            "monitoring": worker.health_status(),
+        }
 
     @app.get("/health/ready")
     def ready():
+        mon_status = worker.health_status()
         try:
             database.probe()
         except Exception:
@@ -104,14 +116,24 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
                     "status": "not_ready",
                     "checks": {"database": "unavailable"},
                     "scope": "foundation",
-                    "monitoring": "not_implemented",
+                    "monitoring": mon_status,
+                },
+            )
+        if worker.is_shutting_down() or mon_status not in {"disabled", "running"}:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "not_ready",
+                    "checks": {"database": "ok"},
+                    "scope": "foundation",
+                    "monitoring": mon_status,
                 },
             )
         return {
             "status": "ready",
             "checks": {"database": "ok"},
             "scope": "foundation",
-            "monitoring": "not_implemented",
+            "monitoring": mon_status,
         }
 
     app.include_router(auth_router)

@@ -621,3 +621,156 @@ def update_threshold_checkpoint(
     if result.rowcount != 1:
         raise storage_error()
     return int(result.rowcount)
+
+
+def list_all_node_ids(session) -> list[int]:
+    rows = (
+        session.execute(text("SELECT node_id FROM dbo.Node ORDER BY node_id ASC")).scalars().all()
+    )
+    return [int(r) for r in rows]
+
+
+def clear_timeout_error(session, *, node_id: int) -> int:
+    result = session.execute(
+        text(
+            "UPDATE dbo.EvaluationState "
+            "SET timeout_last_error_code = NULL, timeout_retry_after = NULL "
+            "WHERE node_id = :node_id"
+        ),
+        {"node_id": int(node_id)},
+    )
+    if result.rowcount != 1:
+        raise storage_error()
+    return int(result.rowcount)
+
+
+def record_engine_error(
+    session,
+    *,
+    node_id: int,
+    engine_kind: str,
+    error_code: str,
+    retry_after: datetime,
+    failed_at: datetime,
+) -> bool:
+    """Persist engine-specific error/backoff only if no newer success superseded failed_at."""
+    if engine_kind not in {"THRESHOLD", "TIMEOUT"}:
+        raise ValueError(f"Unsupported engine_kind: {engine_kind}")
+    state = lock_evaluation_state(session, node_id)
+    if state is None:
+        return False
+    last_success = state.get("last_success_at")
+    if last_success is not None and last_success >= failed_at:
+        return False
+    safe_code = (error_code or "EVALUATION_FAILED")[:64]
+    if engine_kind == "THRESHOLD":
+        sql = (
+            "UPDATE dbo.EvaluationState "
+            "SET last_error_code = :code, retry_after = :retry_after "
+            "WHERE node_id = :node_id"
+        )
+    else:
+        sql = (
+            "UPDATE dbo.EvaluationState "
+            "SET timeout_last_error_code = :code, timeout_retry_after = :retry_after "
+            "WHERE node_id = :node_id"
+        )
+    result = session.execute(
+        text(sql),
+        {"node_id": int(node_id), "code": safe_code, "retry_after": retry_after},
+    )
+    return int(result.rowcount) == 1
+
+
+def finalize_node_evaluation(
+    session,
+    *,
+    node_id: int,
+    target_generation: int,
+    completed_at: datetime,
+) -> bool:
+    """Clear replay markers and advance completed_generation iff target_gen matches."""
+    state = lock_evaluation_state(session, node_id)
+    if state is None:
+        return False
+    if (
+        int(state["desired_generation"]) != int(target_generation)
+        or state.get("last_error_code") is not None
+        or state.get("timeout_last_error_code") is not None
+    ):
+        return False
+    result = session.execute(
+        text(
+            "UPDATE dbo.EvaluationState "
+            "SET completed_generation = :target_gen, "
+            "full_replay_required = 0, "
+            "replay_from_t_node = NULL, "
+            "last_success_at = :completed_at "
+            "WHERE node_id = :node_id"
+        ),
+        {
+            "node_id": int(node_id),
+            "target_gen": int(target_generation),
+            "completed_at": completed_at,
+        },
+    )
+    return int(result.rowcount) == 1
+
+
+def check_m3_schema_ready(conn) -> bool:
+    table_count = conn.execute(
+        text(
+            "SELECT COUNT(*) FROM sys.tables t "
+            "JOIN sys.schemas s ON s.schema_id = t.schema_id "
+            "WHERE s.name = 'dbo' "
+            "AND t.name IN ('AlertEpisode', 'AlertRevision', "
+            "'AlertAcknowledgement', 'AlertReplacement')"
+        )
+    ).scalar_one()
+    if int(table_count) != 4:
+        return False
+    col_count = conn.execute(
+        text(
+            "SELECT COUNT(*) FROM sys.columns "
+            "WHERE object_id = OBJECT_ID('dbo.EvaluationState') "
+            "AND name IN ('timeout_last_error_code', 'timeout_retry_after')"
+        )
+    ).scalar_one()
+    if int(col_count) != 2:
+        return False
+    ver = conn.execute(text("SELECT version_num FROM dbo.alembic_version")).scalar()
+    return ver == "e7c4b6a10d53"
+
+
+def acquire_worker_applock(conn, resource: str) -> int:
+    rc = conn.execute(
+        text(
+            "DECLARE @rc INT; "
+            "EXEC @rc = sys.sp_getapplock "
+            "@Resource = :res, @LockMode = 'Exclusive', "
+            "@LockOwner = 'Session', @LockTimeout = 0; "
+            "SELECT @rc;"
+        ),
+        {"res": resource},
+    ).scalar_one()
+    return int(rc)
+
+
+def check_worker_applock_mode(conn, resource: str) -> str | None:
+    val = conn.execute(
+        text("SELECT APPLOCK_MODE('public', :res, 'Session')"),
+        {"res": resource},
+    ).scalar()
+    return str(val) if val is not None else None
+
+
+def release_worker_applock(conn, resource: str) -> int:
+    rc = conn.execute(
+        text(
+            "DECLARE @rc INT; "
+            "EXEC @rc = sys.sp_releaseapplock @Resource = :res, @LockOwner = 'Session'; "
+            "SELECT @rc;"
+        ),
+        {"res": resource},
+    ).scalar_one()
+    return int(rc)

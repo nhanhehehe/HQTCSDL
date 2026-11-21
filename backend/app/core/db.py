@@ -3,6 +3,15 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import Settings
 
+try:
+    import pyodbc
+
+    # Avoid ODBC double-pooling on top of SQLAlchemy QueuePool so closed/invalidated
+    # connections release SQL Server SPID state (including session applocks) immediately.
+    pyodbc.pooling = False
+except ImportError:
+    pass
+
 
 class Base(DeclarativeBase):
     pass

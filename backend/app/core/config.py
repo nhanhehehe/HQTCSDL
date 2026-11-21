@@ -50,6 +50,23 @@ class NodeTimeProfile(WebModel):
         return self.sampling_interval_seconds + self.normal_delivery_budget_seconds
 
 
+def _parse_positive_int(value: Any, *, env_name: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{env_name} must be a positive integer")
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped.isascii() or not stripped.isdecimal():
+            raise ValueError(f"{env_name} must be a positive integer")
+        parsed = int(stripped)
+    elif isinstance(value, int):
+        parsed = value
+    else:
+        raise ValueError(f"{env_name} must be a positive integer")
+    if parsed <= 0:
+        raise ValueError(f"{env_name} must be positive")
+    return parsed
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="HQ_", env_file=BACKEND_DIR / ".env", extra="forbid", hide_input_in_errors=True
@@ -69,6 +86,12 @@ class Settings(BaseSettings):
     node_time_profiles: Annotated[dict[str, NodeTimeProfile], NoDecode] = Field(
         default_factory=dict
     )
+    monitoring_enabled: bool = False
+    monitoring_tick_seconds: int = 5
+    monitoring_retry_seconds: int = 15
+    monitoring_shutdown_timeout_seconds: int = 30
+    monitoring_command_timeout_seconds: int = 15
+    monitoring_lock_timeout_ms: int = 5000
 
     @field_validator("ingestion_max_body_bytes")
     @classmethod
@@ -87,20 +110,32 @@ class Settings(BaseSettings):
     @field_validator("report_snapshot_ttl_seconds", mode="before")
     @classmethod
     def valid_report_ttl(cls, value: Any) -> int:
-        if isinstance(value, bool):
-            raise ValueError("HQ_REPORT_SNAPSHOT_TTL_SECONDS must be a positive integer")
-        if isinstance(value, str):
-            stripped = value.strip()
-            if not stripped.isascii() or not stripped.isdecimal():
-                raise ValueError("HQ_REPORT_SNAPSHOT_TTL_SECONDS must be a positive integer")
-            parsed = int(stripped)
-        elif isinstance(value, int):
-            parsed = value
-        else:
-            raise ValueError("HQ_REPORT_SNAPSHOT_TTL_SECONDS must be a positive integer")
-        if parsed <= 0:
-            raise ValueError("HQ_REPORT_SNAPSHOT_TTL_SECONDS must be positive")
-        return parsed
+        return _parse_positive_int(value, env_name="HQ_REPORT_SNAPSHOT_TTL_SECONDS")
+
+    @field_validator("monitoring_tick_seconds", mode="before")
+    @classmethod
+    def valid_monitoring_tick_seconds(cls, value: Any) -> int:
+        return _parse_positive_int(value, env_name="HQ_MONITORING_TICK_SECONDS")
+
+    @field_validator("monitoring_retry_seconds", mode="before")
+    @classmethod
+    def valid_monitoring_retry_seconds(cls, value: Any) -> int:
+        return _parse_positive_int(value, env_name="HQ_MONITORING_RETRY_SECONDS")
+
+    @field_validator("monitoring_shutdown_timeout_seconds", mode="before")
+    @classmethod
+    def valid_monitoring_shutdown_timeout_seconds(cls, value: Any) -> int:
+        return _parse_positive_int(value, env_name="HQ_MONITORING_SHUTDOWN_TIMEOUT_SECONDS")
+
+    @field_validator("monitoring_command_timeout_seconds", mode="before")
+    @classmethod
+    def valid_monitoring_command_timeout_seconds(cls, value: Any) -> int:
+        return _parse_positive_int(value, env_name="HQ_MONITORING_COMMAND_TIMEOUT_SECONDS")
+
+    @field_validator("monitoring_lock_timeout_ms", mode="before")
+    @classmethod
+    def valid_monitoring_lock_timeout_ms(cls, value: Any) -> int:
+        return _parse_positive_int(value, env_name="HQ_MONITORING_LOCK_TIMEOUT_MS")
 
     @field_validator("node_time_profiles", mode="before")
     @classmethod
