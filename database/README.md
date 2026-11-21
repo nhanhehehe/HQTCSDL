@@ -17,9 +17,9 @@ M1 `a70b8056608d_create_m1_foundation_tables.py` đã merge qua
 | Danh mục | MetricDefinition |
 
 `alembic_version` là bảng theo dõi revision, không phải bảng nghiệp vụ thứ chín.
-DB mới sau M1 có tổng 9 bảng. Chuỗi trong source là M1 → M2 → PR-A → M3, với
-head `d6b3a5f09c42`. Chọn revision đích theo phần hướng dẫn tương ứng bên dưới.
-DB đã áp riêng M1 vẫn có current `a70b8056608d`.
+DB mới sau M1 có tổng 9 bảng. Chuỗi trong source là M1 → M2 → PR-A → M3 →
+`e7c4b6a10d53` (head), giữ 19 bảng nghiệp vụ. Chọn revision đích theo phần hướng
+dẫn tương ứng bên dưới. DB đã áp riêng M1 vẫn có current `a70b8056608d`.
 
 M3 đưa tổng số bảng nghiệp vụ lên 19. FL-03 tạo Node cùng NodeRuntime/EvaluationState
 trong một transaction và cần ít nhất schema M2.
@@ -282,3 +282,9 @@ mới. Lịch sử cảnh báo và dữ liệu retry TIMEOUT bị mất. Chỉ k
 test được phép bỏ dữ liệu G4 khi worker đã dừng. Việc chạy lại G4 sau downgrade có
 dữ liệu checkpoint cũ cần kế hoạch phục hồi riêng vì checkpoint có thể còn trỏ
 đến projection đã mất.
+
+Revision tiếp theo `e7c4b6a10d53` nối sau `d6b3a5f09c42` làm head mới: chỉ cập
+nhật `CK_ThresholdSetting_range` trên `dbo.ThresholdSetting` để cho phép ngưỡng
+`DECIMAL(9,2)` (hai chữ số lẻ) cho cả năm đại lượng theo `G4-D03`, đồng thời giữ
+nguyên `CK_MeasurementValue_status_range` và `MetricDefinition` ở độ phân giải
+`2/2/2/1/1` để bảo toàn wire/Canonical-v1. Upgrade không xóa hay sửa dữ liệu cũ.

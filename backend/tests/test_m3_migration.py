@@ -8,16 +8,17 @@ from alembic.script import ScriptDirectory
 
 MIGRATIONS = Path(__file__).parents[1] / "migrations"
 REVISION = "d6b3a5f09c42"
+HEAD_REVISION = "e7c4b6a10d53"
 PARENT = "fee0fa015af7"
 TABLES = ("AlertEpisode", "AlertRevision", "AlertAcknowledgement", "AlertReplacement")
 
 
-def render_migrations(direction, *, from_base=False):
+def render_migrations(direction, *, target=REVISION, from_base=False):
     script = ScriptDirectory(str(MIGRATIONS))
     if from_base:
-        revisions = list(reversed(list(script.iterate_revisions(REVISION, "base"))))
+        revisions = list(reversed(list(script.iterate_revisions(target, "base"))))
     else:
-        revisions = [script.get_revision(REVISION)]
+        revisions = [script.get_revision(target)]
     output = StringIO()
     context = MigrationContext.configure(
         dialect_name="mssql", opts={"as_sql": True, "output_buffer": output}
@@ -32,16 +33,18 @@ def render_migrations(direction, *, from_base=False):
     )
 
 
-def test_m3_is_the_single_head_after_pr_a_and_bootstraps_19_tables():
+def test_m3_follows_pr_a_and_bootstraps_19_tables_at_head():
     script = ScriptDirectory(str(MIGRATIONS))
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == [HEAD_REVISION]
+    assert script.get_revision(HEAD_REVISION).down_revision == REVISION
     assert script.get_revision(REVISION).down_revision == PARENT
-    sql = render_migrations("upgrade", from_base=True)
+    sql = render_migrations("upgrade", target=HEAD_REVISION, from_base=True)
     assert len(set(re.findall(r"CREATE TABLE dbo\.(\w+)", sql))) == 19
     assert sql.count("CREATE TABLE") == 19
     assert sql.index("CREATE TABLE dbo.EvaluationState") < sql.index(
         "ALTER TABLE dbo.EvaluationState ADD timeout_last_error_code"
     )
+    assert "value = ROUND(value, 1)" in sql
 
 
 def test_upgrade_only_adds_four_tables_and_two_nullable_timeout_fields():
@@ -102,3 +105,40 @@ def test_downgrade_breaks_fk_cycle_and_only_removes_m3_objects():
         "ALTER TABLE dbo.EvaluationState DROP COLUMN timeout_retry_after",
         "ALTER TABLE dbo.EvaluationState DROP COLUMN timeout_last_error_code",
     ]
+
+
+def test_threshold_decimal_migration_only_relaxes_threshold_setting_check():
+    upgrade_sql = render_migrations("upgrade", target=HEAD_REVISION)
+    statements = [s.strip() for s in upgrade_sql.split(";") if s.strip()]
+    assert len(statements) == 2
+    assert statements[0] == (
+        "ALTER TABLE dbo.ThresholdSetting DROP CONSTRAINT CK_ThresholdSetting_range"
+    )
+    assert statements[1].startswith(
+        "ALTER TABLE dbo.ThresholdSetting ADD CONSTRAINT CK_ThresholdSetting_range CHECK"
+    )
+    assert "ROUND(" not in upgrade_sql
+    assert "MeasurementValue" not in upgrade_sql
+    assert "MetricDefinition" not in upgrade_sql
+    for clause in (
+        "metric_code = 'temperature' AND lower_value BETWEEN -40 AND 85 "
+        "AND upper_value BETWEEN -40 AND 85",
+        "metric_code = 'airHumidity' AND lower_value BETWEEN 0 AND 100 "
+        "AND upper_value BETWEEN 0 AND 100",
+        "metric_code = 'pressure' AND lower_value BETWEEN 300 AND 1100 "
+        "AND upper_value BETWEEN 300 AND 1100",
+        "metric_code = 'light' AND lower_value BETWEEN 0 AND 65535 "
+        "AND upper_value BETWEEN 0 AND 65535",
+        "metric_code = 'soilMoisture' AND lower_value BETWEEN 0 AND 100 "
+        "AND upper_value BETWEEN 0 AND 100",
+    ):
+        assert clause in upgrade_sql
+
+    downgrade_sql = render_migrations("downgrade", target=HEAD_REVISION)
+    down_stmts = [s.strip() for s in downgrade_sql.split(";") if s.strip()]
+    assert len(down_stmts) == 2
+    assert down_stmts[0] == (
+        "ALTER TABLE dbo.ThresholdSetting DROP CONSTRAINT CK_ThresholdSetting_range"
+    )
+    assert "lower_value = ROUND(lower_value, 1)" in down_stmts[1]
+    assert "upper_value = ROUND(upper_value, 1)" in down_stmts[1]
