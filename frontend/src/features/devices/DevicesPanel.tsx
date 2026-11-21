@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ApiError, requestJson } from '../../api/client'
+import { patchGatewayReceiving, patchNodeReceiving } from '../../api/monitoring'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { CursorPager } from '../../components/CursorPager'
 import { DataTable } from '../../components/DataTable'
@@ -121,6 +123,10 @@ function Devices({ csrf }: { csrf: string }) {
   const [credMessage, setCredMessage] = useState('')
   const [credMessageTone, setCredMessageTone] = useState<BannerTone>('info')
   const [revokeTarget, setRevokeTarget] = useState<CredentialView | null>(null)
+  const [receivingConfirmTarget, setReceivingConfirmTarget] = useState<{
+    profile: Profile
+    nextEnabled: boolean
+  } | null>(null)
 
   const generation = useRef(0)
   const areaLoader = useRef(new FarmZoneLoader())
@@ -279,6 +285,7 @@ function Devices({ csrf }: { csrf: string }) {
     setCredUncertain(false)
     setCredMessage('')
     setRevokeTarget(null)
+    setReceivingConfirmTarget(null)
     void loadList(activeTab, '', null, false)
   }, [activeTab, loadList])
 
@@ -293,6 +300,7 @@ function Devices({ csrf }: { csrf: string }) {
     setCredUncertain(false)
     setCredMessage('')
     setRevokeTarget(null)
+    setReceivingConfirmTarget(null)
     setBusy(true)
     try {
       const value = await requestJson<Profile>(`/api/v1/${kind}/${item.id}`)
@@ -460,6 +468,89 @@ function Devices({ csrf }: { csrf: string }) {
         setMessage('Chưa đọc lại được. Hãy thử kiểm tra lại.')
       }
     } finally {
+      if (mounted.current) setBusy(false)
+    }
+  }
+
+  async function toggleReceiving(target: Profile, nextEnabled: boolean) {
+    if (operation.current || !canWrite()) return
+    operation.current = true
+    setBusy(true)
+    const active = generation.current
+    try {
+      if (kind === 'nodes') {
+        const res = await patchNodeReceiving(
+          target.id,
+          {
+            receiving_enabled: nextEnabled,
+            expected_row_version: target.row_version,
+          },
+          csrf,
+        )
+        if (!mounted.current || active !== generation.current) return
+        const updated: Profile = {
+          ...target,
+          receiving_enabled: res.receiving_enabled,
+          row_version: res.profile_row_version,
+        }
+        setSelected(prev => (prev?.id === updated.id ? updated : prev))
+        setItems(prev => prev.map(item => (item.id === updated.id ? updated : item)))
+        setUncertain(false)
+        setMessageTone('ok')
+        setMessage(
+          res.receiving_enabled
+            ? `Đã bật quyền tiếp nhận dữ liệu mới cho Node ${target.device_id ?? target.name}.`
+            : `Đã tắt quyền tiếp nhận dữ liệu mới cho Node ${target.device_id ?? target.name} (đóng mọi period/episode OPEN theo FL-04).`,
+        )
+      } else {
+        const res = await patchGatewayReceiving(
+          target.id,
+          {
+            receiving_enabled: nextEnabled,
+            expected_row_version: target.row_version,
+          },
+          csrf,
+        )
+        if (!mounted.current || active !== generation.current) return
+        const updated: Profile = {
+          ...target,
+          receiving_enabled: res.receiving_enabled,
+          row_version: res.profile_row_version,
+        }
+        setSelected(prev => (prev?.id === updated.id ? updated : prev))
+        setItems(prev => prev.map(item => (item.id === updated.id ? updated : item)))
+        setReceivingConfirmTarget(null)
+        setUncertain(false)
+        setMessageTone('ok')
+        setMessage(
+          res.receiving_enabled
+            ? `Đã bật quyền tiếp nhận cho Gateway ${target.gateway_id ?? target.name} (${res.affected_nodes.length} Node liên kết).`
+            : `Đã tắt quyền tiếp nhận cho Gateway ${target.gateway_id ?? target.name} (${res.affected_nodes.length} Node liên kết đều bị tắt đồng bộ).`,
+        )
+      }
+    } catch (error) {
+      if (!mounted.current || active !== generation.current) return
+      setReceivingConfirmTarget(null)
+      if (error instanceof ApiError && error.status !== 503) {
+        setMessageTone('err')
+        if (error.status === 409) {
+          setMessage(
+            error.code === 'AREA_ARCHIVED'
+              ? 'Farm hoặc Zone đã lưu trữ nên không thể đổi quyền tiếp nhận.'
+              : 'Hồ sơ thiết bị đã thay đổi phiên bản (409). Hãy chọn lại hoặc tải lại hồ sơ trước khi thao tác.',
+          )
+        } else {
+          setMessage(error.message)
+        }
+      } else {
+        setUncertain(true)
+        setMessageTone('warn')
+        setMessage(
+          'Chưa xác nhận kết quả đổi quyền tiếp nhận. Nhấn “Đọc lại hồ sơ” để kiểm tra trạng thái thực tế.',
+        )
+      }
+    } finally {
+      operation.current = false
       if (mounted.current) setBusy(false)
     }
   }
@@ -859,17 +950,43 @@ function Devices({ csrf }: { csrf: string }) {
                         }
                       />
                     </div>
-                    <small>Bật/tắt quyền tiếp nhận dữ liệu mới thuộc giai đoạn G4 (FL-04).</small>
+                    <small>
+                      {kind === 'nodes'
+                        ? 'Bật/tắt quyền tiếp nhận Node (FL-04): khi tắt sẽ khóa nhận mẫu mới và đóng period/episode OPEN.'
+                        : 'Bật/tắt quyền tiếp nhận Gateway (FL-04): thay đổi áp dụng đồng bộ xuống toàn bộ Node thuộc Gateway này.'}
+                    </small>
                   </div>
 
-                  <button
-                    type="button"
-                    className="btn-secondary btn-sm"
-                    disabled={busy}
-                    onClick={() => openEditDrawer(selected)}
-                  >
-                    Chỉnh sửa
-                  </button>
+                  <div className="row">
+                    {kind === 'nodes' && (
+                      <Link className="btn btn-secondary btn-sm" to={`/monitoring?node_id=${encodeURIComponent(selected.id)}`}>
+                        Cấu hình giám sát
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      className={selected.receiving_enabled ? 'btn-danger btn-sm' : 'btn-secondary btn-sm'}
+                      disabled={busy || !canWrite()}
+                      onClick={() => {
+                        const nextEnabled = !selected.receiving_enabled
+                        if (kind === 'gateways') {
+                          setReceivingConfirmTarget({ profile: selected, nextEnabled })
+                        } else {
+                          void toggleReceiving(selected, nextEnabled)
+                        }
+                      }}
+                    >
+                      {selected.receiving_enabled ? 'Tắt tiếp nhận' : 'Bật tiếp nhận'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm"
+                      disabled={busy}
+                      onClick={() => openEditDrawer(selected)}
+                    >
+                      Chỉnh sửa
+                    </button>
+                  </div>
                 </div>
 
                 <dl className="kv-grid">
@@ -1226,6 +1343,41 @@ function Devices({ csrf }: { csrf: string }) {
           }
         }}
         onCancel={() => setRevokeTarget(null)}
+      />
+
+      {/* Modal xác nhận bật/tắt tiếp nhận hàng loạt trên Gateway */}
+      <ConfirmDialog
+        open={receivingConfirmTarget !== null}
+        title={
+          receivingConfirmTarget?.nextEnabled
+            ? `Bật tiếp nhận cho Gateway ${receivingConfirmTarget.profile.gateway_id ?? ''}`
+            : `Tắt tiếp nhận cho Gateway ${receivingConfirmTarget?.profile.gateway_id ?? ''}`
+        }
+        description={
+          <p>
+            Thao tác này sẽ{' '}
+            <strong>
+              {receivingConfirmTarget?.nextEnabled ? 'BẬT' : 'TẮT'}
+            </strong>{' '}
+            quyền tiếp nhận dữ liệu mới trên Gateway{' '}
+            <span className="mono">{receivingConfirmTarget?.profile.gateway_id}</span> và{' '}
+            <strong>
+              {receivingConfirmTarget?.profile.nodes?.length ?? 0} Node liên kết
+            </strong>{' '}
+            trong cùng transaction SQL Server.
+            {!receivingConfirmTarget?.nextEnabled &&
+              ' Mọi timeout period và cảnh báo OPEN của các Node liên kết sẽ được đóng ngay.'}
+          </p>
+        }
+        confirmLabel={receivingConfirmTarget?.nextEnabled ? 'Xác nhận bật' : 'Xác nhận tắt'}
+        tone={receivingConfirmTarget?.nextEnabled ? 'primary' : 'danger'}
+        busy={busy}
+        onConfirm={() => {
+          if (receivingConfirmTarget) {
+            void toggleReceiving(receivingConfirmTarget.profile, receivingConfirmTarget.nextEnabled)
+          }
+        }}
+        onCancel={() => setReceivingConfirmTarget(null)}
       />
     </div>
   )

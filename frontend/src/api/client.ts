@@ -1,6 +1,20 @@
 export class ApiError extends Error {
-  constructor(public status: number, public requestId: string | null, public code = '', message?: string) {
+  constructor(
+    public status: number,
+    public requestId: string | null,
+    public code = '',
+    message?: string,
+    public details?: Record<string, unknown>,
+  ) {
     super(message ?? `Yêu cầu thất bại (HTTP ${status})`)
+  }
+}
+
+export function mutationHeaders(csrf: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    'X-HQ-Client': 'web',
+    'X-CSRF-Token': csrf,
   }
 }
 
@@ -70,9 +84,16 @@ export async function requestJson<T>(path: string, options: RequestOptions = {})
       if (isWeb && response.status === 401 && path !== '/api/v1/auth/login') {
         for (const callback of unauthorized) callback()
       }
-      const envelope = (body ?? {}) as { error?: { code?: string; message?: string } }
-      throw new ApiError(response.status, response.headers.get('X-Request-ID'),
-        envelope.error?.code, envelope.error?.message)
+      const envelope = (body ?? {}) as {
+        error?: { code?: string; message?: string; details?: Record<string, unknown> }
+      }
+      throw new ApiError(
+        response.status,
+        response.headers.get('X-Request-ID'),
+        envelope.error?.code,
+        envelope.error?.message,
+        envelope.error?.details,
+      )
     }
     return body as T
   } finally {
@@ -101,9 +122,16 @@ export async function requestCsvBlob(
       if (isWeb && response.status === 401 && path !== '/api/v1/auth/login') {
         for (const callback of unauthorized) callback()
       }
-      const envelope = (body ?? {}) as { error?: { code?: string; message?: string } }
-      throw new ApiError(response.status, response.headers.get('X-Request-ID'),
-        envelope.error?.code, envelope.error?.message)
+      const envelope = (body ?? {}) as {
+        error?: { code?: string; message?: string; details?: Record<string, unknown> }
+      }
+      throw new ApiError(
+        response.status,
+        response.headers.get('X-Request-ID'),
+        envelope.error?.code,
+        envelope.error?.message,
+        envelope.error?.details,
+      )
     }
     const contentType = response.headers.get('content-type') ?? ''
     if (response.status !== 200 || !contentType.toLowerCase().startsWith('text/csv')) {
