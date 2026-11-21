@@ -417,3 +417,15 @@ test('Dashboard G4 helpers preserve Farm-wide active_alerts regardless of left N
   assert.equal(countFarmActiveAlerts(g3View), null)
   assert.deepEqual(collectFarmActiveAlerts(g3View), [])
 })
+
+test('formatAlertTitle describes TIMEOUT as stale persistence without claiming network disconnect', async () => {
+  const { formatAlertTitle } = await loadG4Modules()
+  assert.equal(
+    formatAlertTitle({ kind: 'TIMEOUT', metric_code: null, direction: null }),
+    'TIMEOUT · Quá hạn lưu bản đo mới',
+  )
+  assert.equal(
+    formatAlertTitle({ kind: 'THRESHOLD', metric_code: 'light', direction: 'HIGH' }),
+    'NGƯỠNG · Ánh sáng (light) · Cao (HIGH)',
+  )
+})

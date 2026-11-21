@@ -500,7 +500,7 @@ function Devices({ csrf }: { csrf: string }) {
         setMessage(
           res.receiving_enabled
             ? `Đã bật quyền tiếp nhận dữ liệu mới cho Node ${target.device_id ?? target.name}.`
-            : `Đã tắt quyền tiếp nhận dữ liệu mới cho Node ${target.device_id ?? target.name} (đóng mọi period/episode OPEN theo FL-04).`,
+            : `Đã tắt quyền tiếp nhận dữ liệu mới cho Node ${target.device_id ?? target.name} (đóng timeout period nếu có và tạm dừng giám sát; episode ngưỡng OPEN được giữ nguyên khi pause).`,
         )
       } else {
         const res = await patchGatewayReceiving(
@@ -952,7 +952,7 @@ function Devices({ csrf }: { csrf: string }) {
                     </div>
                     <small>
                       {kind === 'nodes'
-                        ? 'Bật/tắt quyền tiếp nhận Node (FL-04): khi tắt sẽ khóa nhận mẫu mới và đóng period/episode OPEN.'
+                        ? 'Bật/tắt quyền tiếp nhận Node (FL-04): khi tắt sẽ khóa nhận mẫu mới, đóng timeout period đang mở (nếu có) và tạm dừng giám sát (episode ngưỡng OPEN được giữ nguyên khi pause).'
                         : 'Bật/tắt quyền tiếp nhận Gateway (FL-04): thay đổi áp dụng đồng bộ xuống toàn bộ Node thuộc Gateway này.'}
                     </small>
                   </div>
@@ -1366,7 +1366,7 @@ function Devices({ csrf }: { csrf: string }) {
             </strong>{' '}
             trong cùng transaction SQL Server.
             {!receivingConfirmTarget?.nextEnabled &&
-              ' Mọi timeout period và cảnh báo OPEN của các Node liên kết sẽ được đóng ngay.'}
+              ' Quyền nhận mẫu mới bị khóa, timeout period đang mở (nếu có) được đóng và giám sát tạm dừng; episode ngưỡng OPEN hiện có của các Node được giữ nguyên khi pause.'}
           </p>
         }
         confirmLabel={receivingConfirmTarget?.nextEnabled ? 'Xác nhận bật' : 'Xác nhận tắt'}

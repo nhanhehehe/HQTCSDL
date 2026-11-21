@@ -277,7 +277,7 @@ export function formatAlertTitle(alert: {
   direction: AlertDirection | null
 }): string {
   if (alert.kind === 'TIMEOUT') {
-    return 'TIMEOUT · Mất kết nối / quá hạn dữ liệu'
+    return 'TIMEOUT · Quá hạn lưu bản đo mới'
   }
   const meta = alert.metric_code
     ? METRIC_META.find(m => m.code === alert.metric_code)
