@@ -1,4 +1,5 @@
 import base64
+import json
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timedelta
@@ -887,6 +888,11 @@ def test_g4_d03_two_decimals_all_metrics_and_fl08_lifecycle(monkeypatch):
     assert store.revisions[(ep_id, 2)]["end_reason"] == "THRESHOLD_DISABLED"
     assert store.revisions[(ep_id, 2)]["end_measurement_id"] is None
     assert store.revisions[(ep_id, 2)]["end_event_time"] is None
+    assert json.loads(store.revisions[(ep_id, 2)]["threshold_metadata_json"]) == {
+        "codec": 1,
+        "is_current": True,
+        "transition": "PROGRESS",
+    }
 
 
 def test_fl08_atomic_rollback_and_profile_missing_behavior(monkeypatch):

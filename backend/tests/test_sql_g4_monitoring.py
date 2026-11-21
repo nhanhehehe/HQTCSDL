@@ -82,9 +82,7 @@ def _link_node(engine, *, node_id: int, gateway_id: int) -> str:
     with engine.begin() as conn:
         row = conn.execute(
             text(
-                "UPDATE dbo.Node SET gateway_id = :gid "
-                "OUTPUT INSERTED.row_ver "
-                "WHERE node_id = :nid"
+                "UPDATE dbo.Node SET gateway_id = :gid OUTPUT INSERTED.row_ver WHERE node_id = :nid"
             ),
             {"gid": gateway_id, "nid": node_id},
         ).fetchone()

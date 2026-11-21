@@ -512,7 +512,7 @@ class MonitoringConfigService:
                                     {
                                         "codec": 1,
                                         "is_current": True,
-                                        "transition": "THRESHOLD_DISABLED",
+                                        "transition": "PROGRESS",
                                     },
                                     separators=(",", ":"),
                                 ),
