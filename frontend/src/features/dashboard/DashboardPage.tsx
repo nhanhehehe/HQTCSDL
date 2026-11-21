@@ -442,6 +442,12 @@ function DashboardViewPanel() {
                         </Link>
                         <Link
                           className="btn btn-secondary btn-sm"
+                          to={`/measurements?node_id=${encodeURIComponent(focusedNode.profile.id)}&tab=chart`}
+                        >
+                          Xem biểu đồ (FL-07)
+                        </Link>
+                        <Link
+                          className="btn btn-secondary btn-sm"
                           to={`/reports?node_id=${encodeURIComponent(focusedNode.profile.id)}`}
                         >
                           Tạo báo cáo (FL-13)

@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { Suspense, lazy, useEffect, useState, useSyncExternalStore } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useOptionalOperationalFarm } from '../../app/OperationalFarmContext'
 import { CursorPager } from '../../components/CursorPager'
@@ -11,6 +11,7 @@ import { PageHeader } from '../../components/PageHeader'
 import { StateBanner } from '../../components/StateBanner'
 import { StatusBadge } from '../../components/StatusBadge'
 import { useAuth } from '../auth/AuthProvider'
+import type { ChartPageSize } from './chartData'
 import {
   METRIC_META,
   areaLifecycleBadge,
@@ -21,8 +22,10 @@ import {
 } from './format'
 import { FarmNodesLoader, describeApiError, isAbortOrStale } from './scopeLoader'
 import { MeasurementsStore } from './store'
-import type { TimeMode } from './store'
+import type { HistoryViewTab, TimeMode } from './store'
 import type { MeasurementView, NodeChoice } from './types'
+
+const MeasurementsChartView = lazy(() => import('./MeasurementsChartView'))
 
 export function MeasurementsPage() {
   const { session } = useAuth()
@@ -64,6 +67,8 @@ function MeasurementsViewPanel() {
 
     const paramNodeId = searchParams.get('node_id') ?? ''
     const paramMode: TimeMode = searchParams.get('mode') === 'unknown' ? 'unknown' : 'known'
+    const paramTab: HistoryViewTab =
+      paramMode === 'known' && searchParams.get('tab') === 'chart' ? 'chart' : 'table'
 
     setScopeLoading(true)
     void nodesLoader
@@ -74,11 +79,17 @@ function MeasurementsViewPanel() {
         setNodes(result.nodes)
         setScopeLoading(false)
         if (paramNodeId && result.nodes.some(n => n.id === paramNodeId)) {
-          store.setNodeId(paramNodeId, { timeMode: paramMode })
+          store.setNodeId(paramNodeId, { timeMode: paramMode, viewTab: paramTab })
           void store.loadCurrent()
-          void store.loadHistory(false)
+          if (paramMode === 'known' && paramTab === 'chart') {
+            void store.loadChart(false)
+          } else {
+            void store.loadHistory(false)
+          }
         } else if (paramMode === 'unknown') {
           store.setTimeMode('unknown')
+        } else if (paramTab === 'chart') {
+          store.setViewTab('chart')
         }
       })
       .catch(error => {
@@ -98,27 +109,91 @@ function MeasurementsViewPanel() {
 
   function selectNode(nextNodeId: string, nextMode?: TimeMode) {
     const mode = nextMode ?? snap.history.timeMode
-    store.setNodeId(nextNodeId, { timeMode: mode })
+    const activeTab: HistoryViewTab = mode === 'unknown' ? 'table' : snap.history.viewTab
+    store.setNodeId(nextNodeId, { timeMode: mode, viewTab: activeTab })
     const nextParams = new URLSearchParams(searchParams)
     if (nextNodeId) nextParams.set('node_id', nextNodeId)
     else nextParams.delete('node_id')
-    if (mode === 'unknown') nextParams.set('mode', 'unknown')
-    else nextParams.delete('mode')
+    if (mode === 'unknown') {
+      nextParams.set('mode', 'unknown')
+      nextParams.delete('tab')
+    } else {
+      nextParams.delete('mode')
+      if (activeTab === 'chart') nextParams.set('tab', 'chart')
+      else nextParams.delete('tab')
+    }
     setSearchParams(nextParams, { replace: true })
     if (nextNodeId) {
       void store.loadCurrent()
-      void store.loadHistory(false)
+      if (mode === 'known' && activeTab === 'chart') {
+        void store.loadChart(false)
+      } else {
+        void store.loadHistory(false)
+      }
     }
   }
 
   function switchMode(mode: TimeMode) {
     store.setTimeMode(mode)
     const nextParams = new URLSearchParams(searchParams)
-    if (mode === 'unknown') nextParams.set('mode', 'unknown')
-    else nextParams.delete('mode')
+    if (mode === 'unknown') {
+      nextParams.set('mode', 'unknown')
+      nextParams.delete('tab')
+    } else {
+      nextParams.delete('mode')
+      if (store.getSnapshot().history.viewTab === 'chart') nextParams.set('tab', 'chart')
+      else nextParams.delete('tab')
+    }
     setSearchParams(nextParams, { replace: true })
     if (snap.nodeId) {
+      if (mode === 'known' && store.getSnapshot().history.viewTab === 'chart') {
+        void store.loadChart(false)
+      } else {
+        void store.loadHistory(false)
+      }
+    }
+  }
+
+  function switchViewTab(tab: HistoryViewTab) {
+    if (snap.history.timeMode === 'unknown' && tab === 'chart') return
+    store.setViewTab(tab)
+    const nextParams = new URLSearchParams(searchParams)
+    if (tab === 'chart') nextParams.set('tab', 'chart')
+    else nextParams.delete('tab')
+    setSearchParams(nextParams, { replace: true })
+    if (!snap.nodeId || snap.history.timeMode !== 'known') return
+
+    const latest = store.getSnapshot()
+    if (tab === 'chart') {
+      if (latest.chart.state === null || latest.chart.viewToken !== latest.history.viewToken) {
+        void store.loadChart(false)
+      }
+    } else if (latest.history.state === null) {
+      void store.loadHistory(false, { reuseViewToken: Boolean(latest.history.viewToken) })
+    }
+  }
+
+  function applyKnownFilter() {
+    if (snap.history.viewTab === 'chart') {
+      void store.loadChart(false, { freshSnapshot: true })
+    } else {
       void store.loadHistory(false)
+    }
+  }
+
+  function resetToDefault24h() {
+    store.resetDefaultFilter()
+    if (snap.history.viewTab === 'chart') {
+      void store.loadChart(false, { freshSnapshot: true })
+    } else {
+      void store.loadHistory(false)
+    }
+  }
+
+  function handleChangeChartPageSize(pageSize: ChartPageSize) {
+    store.setChartPageSize(pageSize)
+    if (snap.nodeId && snap.history.timeMode === 'known') {
+      void store.loadChart(false)
     }
   }
 
@@ -177,7 +252,7 @@ function MeasurementsViewPanel() {
       <PageHeader
         eyebrow="Vận hành · G3 · FL-07"
         title="Dữ liệu đo"
-        description="Tra cứu số đo hiện tại, lịch sử có giờ đo (Known), bản ghi chưa xác định giờ đo (Unknown) và API biểu đồ."
+        description="Tra cứu số đo hiện tại, lịch sử có giờ đo (Known), bản ghi chưa xác định giờ đo (Unknown) và biểu đồ chuỗi thời gian."
       />
 
       {!selectedFarm && (
@@ -402,19 +477,20 @@ function MeasurementsViewPanel() {
                   <div className="filter-actions">
                     <button
                       type="button"
-                      disabled={snap.history.loading}
-                      onClick={() => void store.loadHistory(false)}
+                      disabled={
+                        snap.history.loading || snap.chart.loading || snap.chart.loadingBatch
+                      }
+                      onClick={applyKnownFilter}
                     >
-                      {snap.history.loading ? 'Đang lọc…' : 'Lọc dữ liệu'}
+                      {snap.history.loading || snap.chart.loading ? 'Đang lọc…' : 'Lọc dữ liệu'}
                     </button>
                     <button
                       type="button"
                       className="btn-secondary"
-                      disabled={snap.history.loading}
-                      onClick={() => {
-                        store.resetDefaultFilter()
-                        void store.loadHistory(false)
-                      }}
+                      disabled={
+                        snap.history.loading || snap.chart.loading || snap.chart.loadingBatch
+                      }
+                      onClick={resetToDefault24h}
                     >
                       Mặc định 24h
                     </button>
@@ -427,7 +503,7 @@ function MeasurementsViewPanel() {
                     role="tab"
                     aria-selected={snap.history.viewTab === 'table'}
                     className={`tab-btn${snap.history.viewTab === 'table' ? ' active' : ''}`}
-                    onClick={() => store.setViewTab('table')}
+                    onClick={() => switchViewTab('table')}
                   >
                     Bảng lịch sử
                   </button>
@@ -436,7 +512,7 @@ function MeasurementsViewPanel() {
                     role="tab"
                     aria-selected={snap.history.viewTab === 'chart'}
                     className={`tab-btn${snap.history.viewTab === 'chart' ? ' active' : ''}`}
-                    onClick={() => store.setViewTab('chart')}
+                    onClick={() => switchViewTab('chart')}
                   >
                     Biểu đồ chuỗi thời gian
                   </button>
@@ -459,16 +535,17 @@ function MeasurementsViewPanel() {
               />
             )}
 
-            {snap.history.error && (
-              <StateBanner
-                tone="err"
-                message={
-                  snap.history.showingPrevious
-                    ? `Không tải được dữ liệu: ${snap.history.error} (đang hiển thị dữ liệu lần tải trước)`
-                    : `Không tải được dữ liệu: ${snap.history.error}`
-                }
-              />
-            )}
+            {snap.history.error &&
+              (snap.history.timeMode === 'unknown' || snap.history.viewTab === 'table') && (
+                <StateBanner
+                  tone="err"
+                  message={
+                    snap.history.showingPrevious
+                      ? `Không tải được dữ liệu: ${snap.history.error} (đang hiển thị dữ liệu lần tải trước)`
+                      : `Không tải được dữ liệu: ${snap.history.error}`
+                  }
+                />
+              )}
 
             {snap.history.asOf && (
               <div className="row-between">
@@ -479,16 +556,30 @@ function MeasurementsViewPanel() {
                     : ''}
                 </small>
                 {snap.history.viewToken && (
-                  <small className="mono muted">Đã gắn view_token snapshot</small>
+                  <small className="mono muted">Đã gắn view_token snapshot dùng chung</small>
                 )}
               </div>
             )}
 
             {snap.history.viewTab === 'chart' && snap.history.timeMode === 'known' ? (
-              <EmptyState
-                title="Biểu đồ FE đang hoãn tới sau G3 & G4 (G3-D05 / UI-D07)"
-                description="Backend đã hoàn thiện API GET /api/v1/nodes/{id}/measurements/chart dùng chung view_token theo đúng khoảng lọc hiện hành; việc lựa chọn thư viện và dựng đồ thị phía trình duyệt sẽ thực hiện sau khi hoàn tất G3 và G4 (không dùng biểu đồ giả)."
-              />
+              <Suspense
+                fallback={
+                  <p className="muted" role="status">
+                    Đang tải thành phần biểu đồ…
+                  </p>
+                }
+              >
+                <MeasurementsChartView
+                  chart={snap.chart}
+                  range={snap.history.range}
+                  onLoadMore={() => void store.loadChart(true)}
+                  onLoadBatch={() => void store.loadChartBatch()}
+                  onCancelBatch={() => store.cancelChartBatch()}
+                  onReloadFresh={() => void store.loadChart(false, { freshSnapshot: true })}
+                  onChangePageSize={handleChangeChartPageSize}
+                  onSwitchUnknown={() => switchMode('unknown')}
+                />
+              </Suspense>
             ) : snap.history.loading && snap.history.state === null ? (
               <p className="muted" role="status">
                 Đang tải lịch sử dữ liệu đo…
