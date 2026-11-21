@@ -774,3 +774,391 @@ def release_worker_applock(conn, resource: str) -> int:
         {"res": resource},
     ).scalar_one()
     return int(rc)
+
+
+def get_alert_episode_context(
+    session, episode_id: int, *, lock_episode: bool = False
+) -> dict[str, Any] | None:
+    hint = " WITH (UPDLOCK, HOLDLOCK)" if lock_episode else ""
+    row = (
+        session.execute(
+            text(
+                "SELECT e.episode_id, e.node_id, e.alert_kind, e.metric_code, "
+                "e.lifecycle_status, e.is_current, e.current_revision_no, "
+                "e.first_detected_at, e.acknowledgement_version, "
+                "n.device_code, n.name AS node_name, n.zone_id, n.gateway_id, "
+                "z.farm_id, z.zone_code, z.name AS zone_name, z.archived_at AS zone_archived_at, "
+                "f.farm_code, f.name AS farm_name, f.archived_at AS farm_archived_at, "
+                "r.revision_no, r.config_id, r.period_id, r.direction, "
+                "r.start_event_time, r.end_event_time, r.start_backend_at, r.end_backend_at, "
+                "r.closed_at, r.end_reason, r.start_measurement_id, r.end_measurement_id, "
+                "r.lower_snapshot, r.upper_snapshot, r.timeout_snapshot, "
+                "r.evaluated_at, r.evaluation_generation, r.threshold_metadata_json, "
+                "aa.acknowledged_revision_no, aa.admin_id AS ack_admin_id, "
+                "aa.acknowledged_at, aa.note AS ack_note, adm.username AS ack_username "
+                f"FROM dbo.AlertEpisode e{hint} "
+                "JOIN dbo.Node n ON n.node_id = e.node_id "
+                "JOIN dbo.Zone z ON z.zone_id = n.zone_id "
+                "JOIN dbo.Farm f ON f.farm_id = z.farm_id "
+                "LEFT JOIN dbo.AlertRevision r "
+                "ON r.episode_id = e.episode_id AND r.revision_no = e.current_revision_no "
+                "LEFT JOIN dbo.AlertAcknowledgement aa "
+                "ON aa.episode_id = e.episode_id "
+                "AND aa.acknowledgement_version = e.acknowledgement_version "
+                "LEFT JOIN dbo.AdminAccount adm ON adm.admin_id = aa.admin_id "
+                "WHERE e.episode_id = :episode_id"
+            ),
+            {"episode_id": int(episode_id)},
+        )
+        .mappings()
+        .first()
+    )
+    return dict(row) if row is not None else None
+
+
+def resolve_episode_node_id(session, episode_id: int) -> int | None:
+    val = session.execute(
+        text("SELECT node_id FROM dbo.AlertEpisode WHERE episode_id = :eid"),
+        {"eid": int(episode_id)},
+    ).scalar()
+    return int(val) if val is not None else None
+
+
+def lock_alert_episode_by_id(session, episode_id: int) -> dict[str, Any] | None:
+    row = (
+        session.execute(
+            text(
+                "SELECT episode_id, node_id, alert_kind, metric_code, lifecycle_status, "
+                "is_current, current_revision_no, first_detected_at, acknowledgement_version "
+                "FROM dbo.AlertEpisode WITH (UPDLOCK, HOLDLOCK) "
+                "WHERE episode_id = :eid"
+            ),
+            {"eid": int(episode_id)},
+        )
+        .mappings()
+        .first()
+    )
+    return dict(row) if row is not None else None
+
+
+def get_alert_acknowledgement(
+    session, episode_id: int, acknowledgement_version: int
+) -> dict[str, Any] | None:
+    row = (
+        session.execute(
+            text(
+                "SELECT aa.episode_id, aa.acknowledgement_version, aa.acknowledged_revision_no, "
+                "aa.admin_id, aa.acknowledged_at, aa.note, adm.username "
+                "FROM dbo.AlertAcknowledgement aa "
+                "JOIN dbo.AdminAccount adm ON adm.admin_id = aa.admin_id "
+                "WHERE aa.episode_id = :eid AND aa.acknowledgement_version = :ver"
+            ),
+            {"eid": int(episode_id), "ver": int(acknowledgement_version)},
+        )
+        .mappings()
+        .first()
+    )
+    return dict(row) if row is not None else None
+
+
+def insert_alert_acknowledgement(
+    session,
+    *,
+    episode_id: int,
+    acknowledgement_version: int,
+    acknowledged_revision_no: int,
+    admin_id: int,
+    acknowledged_at: datetime,
+    note: str | None,
+) -> None:
+    result = session.execute(
+        text(
+            "INSERT INTO dbo.AlertAcknowledgement ("
+            "episode_id, acknowledgement_version, acknowledged_revision_no, "
+            "admin_id, acknowledged_at, note"
+            ") VALUES ("
+            ":eid, :ver, :rev_no, :admin_id, :ack_at, :note"
+            ")"
+        ),
+        {
+            "eid": int(episode_id),
+            "ver": int(acknowledgement_version),
+            "rev_no": int(acknowledged_revision_no),
+            "admin_id": int(admin_id),
+            "ack_at": acknowledged_at,
+            "note": note,
+        },
+    )
+    if result.rowcount != 1:
+        raise storage_error()
+
+
+def list_alerts_page(
+    session,
+    *,
+    farm_id: int,
+    node_id: int | None,
+    view: str,
+    kind: str | None,
+    lifecycle: str | None,
+    acknowledged: bool | None,
+    recovery_proven: bool | None,
+    from_dt: datetime | None,
+    to_dt: datetime | None,
+    boundary_detected_at: datetime | None,
+    boundary_episode_id: int | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    clauses = ["z.farm_id = :farm_id", "e.is_current = 1"]
+    params: dict[str, Any] = {"farm_id": int(farm_id), "limit": int(limit)}
+    if node_id is not None:
+        clauses.append("e.node_id = :node_id")
+        params["node_id"] = int(node_id)
+    if view == "active":
+        clauses.append("e.lifecycle_status = 'OPEN'")
+    elif lifecycle is not None:
+        clauses.append("e.lifecycle_status = :lifecycle")
+        params["lifecycle"] = lifecycle
+    if kind is not None:
+        clauses.append("e.alert_kind = :kind")
+        params["kind"] = kind
+    if acknowledged is True:
+        clauses.append("aa.episode_id IS NOT NULL")
+    elif acknowledged is False:
+        clauses.append("aa.episode_id IS NULL")
+    if recovery_proven is True:
+        clauses.append(
+            "e.alert_kind = 'THRESHOLD' AND e.lifecycle_status = 'CLOSED' "
+            "AND r.end_reason = 'RECOVERED'"
+        )
+    elif recovery_proven is False:
+        clauses.append(
+            "e.alert_kind = 'THRESHOLD' AND NOT ("
+            "e.lifecycle_status = 'CLOSED' AND r.end_reason = 'RECOVERED'"
+            ")"
+        )
+    if from_dt is not None:
+        clauses.append("e.first_detected_at >= :from_dt")
+        params["from_dt"] = from_dt
+    if to_dt is not None:
+        clauses.append("e.first_detected_at <= :to_dt")
+        params["to_dt"] = to_dt
+    if boundary_detected_at is not None and boundary_episode_id is not None:
+        clauses.append(
+            "(e.first_detected_at < :b_dt "
+            "OR (e.first_detected_at = :b_dt AND e.episode_id < :b_id))"
+        )
+        params["b_dt"] = boundary_detected_at
+        params["b_id"] = int(boundary_episode_id)
+
+    where_sql = " AND ".join(clauses)
+    rows = (
+        session.execute(
+            text(
+                "SELECT TOP (:limit) "
+                "e.episode_id, e.node_id, e.alert_kind, e.metric_code, "
+                "e.lifecycle_status, e.is_current, e.current_revision_no, "
+                "e.first_detected_at, e.acknowledgement_version, "
+                "n.device_code, n.name AS node_name, n.zone_id, "
+                "z.farm_id, z.zone_code, z.name AS zone_name, "
+                "r.revision_no, r.config_id, r.period_id, r.direction, "
+                "r.start_event_time, r.end_event_time, r.start_backend_at, r.end_backend_at, "
+                "r.closed_at, r.end_reason, r.start_measurement_id, r.end_measurement_id, "
+                "r.lower_snapshot, r.upper_snapshot, r.timeout_snapshot, "
+                "r.evaluated_at, r.evaluation_generation, r.threshold_metadata_json, "
+                "aa.acknowledged_revision_no, aa.admin_id AS ack_admin_id, "
+                "aa.acknowledged_at, aa.note AS ack_note, adm.username AS ack_username "
+                "FROM dbo.AlertEpisode e "
+                "JOIN dbo.Node n ON n.node_id = e.node_id "
+                "JOIN dbo.Zone z ON z.zone_id = n.zone_id "
+                "LEFT JOIN dbo.AlertRevision r "
+                "ON r.episode_id = e.episode_id AND r.revision_no = e.current_revision_no "
+                "LEFT JOIN dbo.AlertAcknowledgement aa "
+                "ON aa.episode_id = e.episode_id "
+                "AND aa.acknowledgement_version = e.acknowledgement_version "
+                "LEFT JOIN dbo.AdminAccount adm ON adm.admin_id = aa.admin_id "
+                f"WHERE {where_sql} "
+                "ORDER BY e.first_detected_at DESC, e.episode_id DESC"
+            ),
+            params,
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows]
+
+
+def list_active_open_alerts_for_nodes(session, node_ids: list[int]) -> list[dict[str, Any]]:
+    if not node_ids:
+        return []
+    placeholders = ", ".join(f":nid_{i}" for i in range(len(node_ids)))
+    params = {f"nid_{i}": int(nid) for i, nid in enumerate(node_ids)}
+    rows = (
+        session.execute(
+            text(
+                "SELECT "
+                "e.episode_id, e.node_id, e.alert_kind, e.metric_code, "
+                "e.lifecycle_status, e.is_current, e.current_revision_no, "
+                "e.first_detected_at, e.acknowledgement_version, "
+                "n.device_code, n.name AS node_name, n.zone_id, "
+                "z.farm_id, z.zone_code, z.name AS zone_name, "
+                "r.revision_no, r.config_id, r.period_id, r.direction, "
+                "r.start_event_time, r.end_event_time, r.start_backend_at, r.end_backend_at, "
+                "r.closed_at, r.end_reason, r.start_measurement_id, r.end_measurement_id, "
+                "r.lower_snapshot, r.upper_snapshot, r.timeout_snapshot, "
+                "r.evaluated_at, r.evaluation_generation, r.threshold_metadata_json, "
+                "aa.acknowledged_revision_no, aa.admin_id AS ack_admin_id, "
+                "aa.acknowledged_at, aa.note AS ack_note, adm.username AS ack_username "
+                "FROM dbo.AlertEpisode e "
+                "JOIN dbo.Node n ON n.node_id = e.node_id "
+                "JOIN dbo.Zone z ON z.zone_id = n.zone_id "
+                "LEFT JOIN dbo.AlertRevision r "
+                "ON r.episode_id = e.episode_id AND r.revision_no = e.current_revision_no "
+                "LEFT JOIN dbo.AlertAcknowledgement aa "
+                "ON aa.episode_id = e.episode_id "
+                "AND aa.acknowledgement_version = e.acknowledgement_version "
+                "LEFT JOIN dbo.AdminAccount adm ON adm.admin_id = aa.admin_id "
+                f"WHERE e.node_id IN ({placeholders}) "
+                "AND e.is_current = 1 AND e.lifecycle_status = 'OPEN' "
+                "ORDER BY e.first_detected_at DESC, e.episode_id DESC"
+            ),
+            params,
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows]
+
+
+def list_evaluation_states_for_nodes(session, node_ids: list[int]) -> dict[int, dict[str, Any]]:
+    if not node_ids:
+        return {}
+    placeholders = ", ".join(f":nid_{i}" for i in range(len(node_ids)))
+    params = {f"nid_{i}": int(nid) for i, nid in enumerate(node_ids)}
+    rows = (
+        session.execute(
+            text(
+                "SELECT node_id, desired_generation, completed_generation, "
+                "replay_from_t_node, full_replay_required, last_success_at, "
+                "last_error_code, retry_after, last_threshold_measurement_id, "
+                "last_threshold_event_at, threshold_checkpoint_json, "
+                "timeout_last_error_code, timeout_retry_after "
+                "FROM dbo.EvaluationState "
+                f"WHERE node_id IN ({placeholders})"
+            ),
+            params,
+        )
+        .mappings()
+        .all()
+    )
+    return {int(r["node_id"]): dict(r) for r in rows}
+
+
+def list_audit_revisions(
+    session, *, episode_id: int, boundary_rev_no: int | None, limit: int
+) -> list[dict[str, Any]]:
+    params: dict[str, Any] = {"eid": int(episode_id), "limit": int(limit)}
+    extra = ""
+    if boundary_rev_no is not None:
+        extra = " AND revision_no < :b_rev"
+        params["b_rev"] = int(boundary_rev_no)
+    rows = (
+        session.execute(
+            text(
+                "SELECT TOP (:limit) episode_id, revision_no, config_id, period_id, direction, "
+                "start_event_time, end_event_time, start_backend_at, end_backend_at, "
+                "closed_at, end_reason, start_measurement_id, end_measurement_id, "
+                "lower_snapshot, upper_snapshot, timeout_snapshot, evaluated_at, "
+                "evaluation_generation, acknowledgement_version, threshold_metadata_json "
+                "FROM dbo.AlertRevision "
+                f"WHERE episode_id = :eid{extra} "
+                "ORDER BY revision_no DESC"
+            ),
+            params,
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows]
+
+
+def list_audit_acknowledgements(
+    session,
+    *,
+    episode_id: int,
+    exact_version: int | None,
+    boundary_ack_ver: int | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    params: dict[str, Any] = {"eid": int(episode_id), "limit": int(limit)}
+    extra = ""
+    if exact_version is not None:
+        extra = " AND aa.acknowledgement_version = :exact_ver"
+        params["exact_ver"] = int(exact_version)
+    elif boundary_ack_ver is not None:
+        extra = " AND aa.acknowledgement_version < :b_ver"
+        params["b_ver"] = int(boundary_ack_ver)
+    rows = (
+        session.execute(
+            text(
+                "SELECT TOP (:limit) aa.episode_id, aa.acknowledgement_version, "
+                "aa.acknowledged_revision_no, aa.admin_id, aa.acknowledged_at, aa.note, "
+                "adm.username "
+                "FROM dbo.AlertAcknowledgement aa "
+                "JOIN dbo.AdminAccount adm ON adm.admin_id = aa.admin_id "
+                f"WHERE aa.episode_id = :eid{extra} "
+                "ORDER BY aa.acknowledgement_version DESC"
+            ),
+            params,
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows]
+
+
+def list_audit_replacements(
+    session,
+    *,
+    episode_id: int,
+    boundary: tuple[datetime, int, int, int, int] | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    params: dict[str, Any] = {"eid": int(episode_id), "limit": int(limit)}
+    extra = ""
+    if boundary is not None:
+        b_dt, b_oep, b_orev, b_nep, b_nrev = boundary
+        extra = (
+            " AND (created_at < :b_dt "
+            "OR (created_at = :b_dt AND old_episode_id < :b_oep) "
+            "OR (created_at = :b_dt AND old_episode_id = :b_oep AND old_revision_no < :b_orev) "
+            "OR (created_at = :b_dt AND old_episode_id = :b_oep AND old_revision_no = :b_orev "
+            "AND new_episode_id < :b_nep) "
+            "OR (created_at = :b_dt AND old_episode_id = :b_oep AND old_revision_no = :b_orev "
+            "AND new_episode_id = :b_nep AND new_revision_no < :b_nrev))"
+        )
+        params.update(
+            {
+                "b_dt": b_dt,
+                "b_oep": int(b_oep),
+                "b_orev": int(b_orev),
+                "b_nep": int(b_nep),
+                "b_nrev": int(b_nrev),
+            }
+        )
+    rows = (
+        session.execute(
+            text(
+                "SELECT TOP (:limit) old_episode_id, old_revision_no, "
+                "new_episode_id, new_revision_no, created_at, evaluation_generation, reason "
+                "FROM dbo.AlertReplacement "
+                f"WHERE (old_episode_id = :eid OR new_episode_id = :eid){extra} "
+                "ORDER BY created_at DESC, old_episode_id DESC, old_revision_no DESC, "
+                "new_episode_id DESC, new_revision_no DESC"
+            ),
+            params,
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows]

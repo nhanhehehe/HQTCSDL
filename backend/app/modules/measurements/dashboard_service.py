@@ -1,8 +1,12 @@
+from collections import defaultdict
 from typing import Any
 
 from app.core.web import fail, serialize_utc, utc_ms_from_datetime, web_session_transaction
+from app.modules.alerts import repository as alerts_repo
+from app.modules.alerts.schemas import build_alert_summary
 from app.modules.measurements import repository as repo
 from app.modules.measurements.freshness import compute_freshness
+from app.modules.monitoring_config import repository as mc_repo
 
 
 class DashboardService:
@@ -45,6 +49,14 @@ class DashboardService:
             ]
             values_map = repo.load_measurement_values_map(session, header_mids)
 
+            open_alert_rows = alerts_repo.list_active_open_alerts_for_nodes(session, target_nids)
+            alerts_by_node: dict[int, list[dict[str, Any]]] = defaultdict(list)
+            unique_open_ids: set[str] = set()
+            for alert_row in open_alert_rows:
+                summary = build_alert_summary(alert_row)
+                alerts_by_node[int(alert_row["node_id"])].append(summary)
+                unique_open_ids.add(summary["id"])
+
             node_views: list[dict[str, Any]] = []
             for row in target_nodes:
                 nid = int(row["node_id"])
@@ -75,6 +87,17 @@ class DashboardService:
                     as_of_utc_ms=as_of_utc_ms,
                     profile=profiles.get(device_code),
                 )
+                monitoring_full = mc_repo.build_monitoring_state(
+                    session,
+                    node_id=nid,
+                    device_code=device_code,
+                    settings=self.settings,
+                    lock=False,
+                )
+                evaluation_view = monitoring_full["evaluation"]
+                monitoring_view = {k: v for k, v in monitoring_full.items() if k != "evaluation"}
+                node_alerts = alerts_by_node.get(nid, [])
+
                 node_views.append(
                     {
                         "profile": {
@@ -101,16 +124,16 @@ class DashboardService:
                         },
                         "current": current_envelope,
                         "freshness": freshness_view,
-                        "monitoring": None,
-                        "evaluation": None,
-                        "active_alerts": None,
-                        "active_count": None,
+                        "monitoring": monitoring_view,
+                        "evaluation": evaluation_view,
+                        "active_alerts": node_alerts,
+                        "active_count": str(len(node_alerts)),
                     }
                 )
 
             return {
                 "as_of": as_of_iso,
-                "capabilities": {"monitoring": False, "alerts": False},
+                "capabilities": {"monitoring": True, "alerts": True},
                 "scope": {
                     "kind": scope_kind,
                     "farm_id": str(farm["farm_id"]),
@@ -122,6 +145,6 @@ class DashboardService:
                     },
                     "node_ids": [str(nid) for nid in target_nids],
                 },
-                "active_count": None,
+                "active_count": str(len(unique_open_ids)),
                 "nodes": node_views,
             }

@@ -336,6 +336,52 @@ def _client_with_fake_dashboard(monkeypatch, settings=None):
     monkeypatch.setattr(meas_repo, "load_latest_known_headers_for_nodes", fake_latest)
     monkeypatch.setattr(meas_repo, "find_nodes_with_any_measurement", fake_any)
     monkeypatch.setattr(meas_repo, "load_measurement_values_map", fake_vals)
+
+    def fake_monitoring_state(session, *, node_id, device_code, settings, lock=False):
+        return {
+            "node_id": str(node_id),
+            "threshold_config_id": None,
+            "timeout_config_id": None,
+            "thresholds": [
+                {
+                    "metric_code": m,
+                    "enabled": False,
+                    "lower": None,
+                    "upper": None,
+                    "state": "UNCONFIGURED",
+                }
+                for m in meas_repo.METRIC_ORDER
+            ],
+            "timeout_minutes": None,
+            "timeout_state": "UNCONFIGURED",
+            "S": None,
+            "L": None,
+            "active_timeout_period_id": None,
+            "evaluation": {
+                "desired_generation": "0",
+                "completed_generation": "0",
+                "status": "UP_TO_DATE",
+                "last_success_at": None,
+                "last_error_code": None,
+            },
+            "timeout_validation": {
+                "state": "READY"
+                if device_code in settings.node_time_profiles
+                else "PROFILE_MISSING",
+                "sampling_interval_seconds": None,
+                "normal_delivery_budget_seconds": None,
+                "min_timeout_minutes": None,
+            },
+        }
+
+    monkeypatch.setattr(
+        "app.modules.measurements.dashboard_service.alerts_repo.list_active_open_alerts_for_nodes",
+        lambda _s, _nids: [],
+    )
+    monkeypatch.setattr(
+        "app.modules.measurements.dashboard_service.mc_repo.build_monitoring_state",
+        fake_monitoring_state,
+    )
     return app, state
 
 
@@ -356,12 +402,12 @@ def test_dashboard_scope_validation_and_g3_dto_contract(monkeypatch):
         assert cross.status_code == 400
         assert cross.json()["error"]["code"] == "INPUT_INVALID"
 
-        # Empty farm returns 200 with nodes=[], active_count=None (G3-D02)
+        # Empty farm returns 200 with nodes=[], active_count="0" (G4 FL-12)
         empty_res = client.get("/api/v1/dashboard?farm_id=3")
         assert empty_res.status_code == 200
         empty_body = empty_res.json()
-        assert empty_body["capabilities"] == {"monitoring": False, "alerts": False}
-        assert empty_body["active_count"] is None
+        assert empty_body["capabilities"] == {"monitoring": True, "alerts": True}
+        assert empty_body["active_count"] == "0"
         assert empty_body["scope"] == {
             "kind": "FARM",
             "farm_id": "3",
@@ -393,16 +439,16 @@ def test_dashboard_freshness_states_boundaries_and_privacy(monkeypatch):
         body = res.json()
         assert "last_new_persisted_at" not in res.text
         assert "backend_received_at" not in res.text
-        assert body["capabilities"] == {"monitoring": False, "alerts": False}
-        assert body["active_count"] is None
+        assert body["capabilities"] == {"monitoring": True, "alerts": True}
+        assert body["active_count"] == "0"
 
         by_id = {n["profile"]["id"]: n for n in body["nodes"]}
-        # Check G3-D02 null G4 fields on every node
+        # Check G4 FL-12 populated fields on every node
         for node_view in body["nodes"]:
-            assert node_view["monitoring"] is None
-            assert node_view["evaluation"] is None
-            assert node_view["active_alerts"] is None
-            assert node_view["active_count"] is None
+            assert node_view["monitoring"] is not None
+            assert node_view["evaluation"]["status"] == "UP_TO_DATE"
+            assert node_view["active_alerts"] == []
+            assert node_view["active_count"] == "0"
 
         # 101: FRESH with sensor error & 0 lux preserved in fixed 5-metric order
         n101 = by_id["101"]

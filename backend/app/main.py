@@ -21,6 +21,8 @@ from app.core.errors import (
     validation_error,
     web_error,
 )
+from app.modules.alerts.router import router as alerts_router
+from app.modules.alerts.service import AlertsService
 from app.modules.alerts.worker import MonitoringWorker
 from app.modules.areas.router import router as areas_router
 from app.modules.areas.service import AreaService
@@ -67,6 +69,7 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
     app.state.measurements = MeasurementsService(database, settings)
     app.state.dashboard = DashboardService(database, settings)
     app.state.monitoring_config = MonitoringConfigService(database, settings)
+    app.state.alerts = AlertsService(database, settings)
     app.state.reports = ReportService(database, settings)
     app.add_exception_handler(WebError, web_error)
     app.add_exception_handler(IngestionError, ingestion_error)
@@ -142,6 +145,7 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
     app.include_router(ingestion_router)
     app.include_router(measurements_router)
     app.include_router(monitoring_config_router)
+    app.include_router(alerts_router)
     app.include_router(reports_router)
 
     @app.api_route(
