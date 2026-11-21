@@ -38,14 +38,21 @@ export type DashboardNodeSummary = {
   receiving_enabled: boolean
 }
 
+export type DashboardMonitoringSnapshot = Omit<
+  import('../../api/monitoring').MonitoringStateView,
+  'evaluation'
+>
+export type DashboardEvaluationView = import('../../api/monitoring').EvaluationView
+export type DashboardAlertSummary = import('../../api/alerts').AlertSummaryView
+
 export type NodeDashboardView = {
   profile: DashboardNodeSummary
   current: CurrentMeasurementResponse
   freshness: FreshnessView
-  monitoring: null
-  evaluation: null
-  active_alerts: null
-  active_count: string | null
+  monitoring: DashboardMonitoringSnapshot | null
+  evaluation: DashboardEvaluationView | null
+  active_alerts: DashboardAlertSummary[] | null
+  active_count: string | number | null
 }
 
 export type DashboardView = {

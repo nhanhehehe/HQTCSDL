@@ -17,12 +17,12 @@ M1 `a70b8056608d_create_m1_foundation_tables.py` đã merge qua
 | Danh mục | MetricDefinition |
 
 `alembic_version` là bảng theo dõi revision, không phải bảng nghiệp vụ thứ chín.
-DB mới sau M1 có tổng 9 bảng. Source hiện có head `fee0fa015af7` (PR-A), sau M2
-`b15e2c03a001`; đọc phần M2 và PR-A bên dưới trước khi chạy `upgrade head`. DB đã áp riêng M1 vẫn có
-current `a70b8056608d`, không có nghĩa M2 đã được áp.
+DB mới sau M1 có tổng 9 bảng. Chuỗi trong source là M1 → M2 → PR-A → M3 →
+`e7c4b6a10d53` (head), giữ 19 bảng nghiệp vụ. Chọn revision đích theo phần hướng
+dẫn tương ứng bên dưới. DB đã áp riêng M1 vẫn có current `a70b8056608d`.
 
-M2 có trong source; M3 (4 bảng cảnh báo/audit) chưa triển khai. FL-03 đã có API tạo
-Node, thêm NodeRuntime/EvaluationState cùng transaction nên DB chỉ có M1 chưa đủ.
+M3 đưa tổng số bảng nghiệp vụ lên 19. FL-03 tạo Node cùng NodeRuntime/EvaluationState
+trong một transaction và cần ít nhất schema M2.
 Migrations không tạo Admin, Gateway/Node demo hoặc khóa thiết bị. Seed nền tảng
 chỉ thêm Farm/Zone/Metric; Admin tạo bằng [CLI riêng](../README.md#tao-tai-khoan-admin).
 Backend không tự áp migration hoặc seed lúc startup.
@@ -134,7 +134,7 @@ uv run alembic current
 
 Sau downgrade, `current` không có revision; chỉ còn bảng `alembic_version` (không
 có dòng version). Nếu chỉ kiểm M1, tạo lại bằng `uv run alembic upgrade a70b8056608d`,
-kiểm current và chạy seed nếu thiếu dữ liệu nền. `upgrade head` sẽ áp cả M2 và PR-A, không
+kiểm current và chạy seed nếu thiếu dữ liệu nền. `upgrade head` sẽ áp cả M2, PR-A và M3, không
 chỉ M1. Không dùng downgrade như cách vận hành thường xuyên trên dev/demo.
 
 ### 5. Áp lên DB dev sau kiểm chứng
@@ -204,7 +204,7 @@ và EvaluationState trong cùng transaction; chỉ trả thành công sau commit
 Đúng năm Value/THRESHOLD setting, config đúng loại, pointer tới config hiện hành/period
 đang mở và khoảng lịch sử không chồng cần validation trong đường ghi nghiệp vụ sau này.
 CHECK/FK không tự bảo đảm các aggregate đó. FK ghép hiện bảo đảm pointer cùng Node.
-Không có FK đến M3/AlertEpisode khi bảng chưa tồn tại; codec checkpoint chưa được thực thi.
+Các con trỏ M2 không phụ thuộc bảng cảnh báo. Codec checkpoint thuộc triển khai FL-09.
 
 Chỉ thử downgrade trên DB test được phép bỏ dữ liệu M2, về `a70b8056608d`, rồi upgrade
 lại; không downgrade base hay reset seed. Downgrade M2 xóa bảy bảng mới và dữ liệu của
@@ -250,3 +250,41 @@ mất trạng thái archive/version; cần DB disposable riêng và phê duyệt
 về M2, không downgrade base. Không thử trên DB có dữ liệu cần bảo toàn.
 
 Bằng chứng và phần chưa chạy: [PR-A validation](../docs/farm-zone-lifecycle-validation.md).
+
+<a id="ap-m3"></a>
+
+## M3 — Cảnh báo và audit
+
+Revision `d6b3a5f09c42` nối sau PR-A `fee0fa015af7` và thêm
+`AlertEpisode`, `AlertRevision`, `AlertAcknowledgement`, `AlertReplacement`.
+Hai cột nullable `EvaluationState.timeout_last_error_code` và
+`timeout_retry_after` phục vụ retry riêng của TIMEOUT. M3 giữ ba cột checkpoint
+M2, không backfill hay thêm dữ liệu seed.
+
+`AlertEpisode.current_revision_no` có FK ghép theo episode, thêm sau khi bảng
+revision tồn tại. Đường ghi phải hoàn thiện con trỏ trước commit và kiểm config,
+period, mẫu thuộc Node/loại/metric tương ứng, version ý nghĩa của ghi nhận và
+lineage giữa các episode. Hai filtered unique index giới hạn mỗi Node một
+TIMEOUT OPEN hiện hành và một THRESHOLD OPEN hiện hành cho mỗi metric. Xem
+[03.4](https://bengame2006.atlassian.net/wiki/spaces/HQTCSDL/pages/14352390) và
+[issue #27](https://github.com/nhanhehehe/HQTCSDL/issues/27).
+
+Kiểm offline từ `backend/` bằng `uv run pytest tests/test_m3_migration.py -q`.
+Khi đã được phép áp trên DB test riêng, xác minh DB/login qua migration URL,
+kiểm `alembic current` và dữ liệu cần bảo toàn trước khi ghi. Với DB đang ở PR-A,
+review `uv run alembic upgrade fee0fa015af7:d6b3a5f09c42 --sql` rồi áp đúng revision
+`uv run alembic upgrade d6b3a5f09c42`. Kiểm current, 19 bảng nghiệp vụ, FK, filtered
+index, dữ liệu cũ và hai cột mới. Render offline chưa kiểm chứng được các thao tác
+đó trên SQL Server thật.
+
+Downgrade về `fee0fa015af7` gỡ FK vòng trước, sau đó xóa bốn bảng và hai cột retry
+mới. Lịch sử cảnh báo và dữ liệu retry TIMEOUT bị mất. Chỉ kiểm downgrade trên DB
+test được phép bỏ dữ liệu G4 khi worker đã dừng. Việc chạy lại G4 sau downgrade có
+dữ liệu checkpoint cũ cần kế hoạch phục hồi riêng vì checkpoint có thể còn trỏ
+đến projection đã mất.
+
+Revision tiếp theo `e7c4b6a10d53` nối sau `d6b3a5f09c42` làm head mới: chỉ cập
+nhật `CK_ThresholdSetting_range` trên `dbo.ThresholdSetting` để cho phép ngưỡng
+`DECIMAL(9,2)` (hai chữ số lẻ) cho cả năm đại lượng theo `G4-D03`, đồng thời giữ
+nguyên `CK_MeasurementValue_status_range` và `MetricDefinition` ở độ phân giải
+`2/2/2/1/1` để bảo toàn wire/Canonical-v1. Upgrade không xóa hay sửa dữ liệu cũ.

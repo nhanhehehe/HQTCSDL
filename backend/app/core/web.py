@@ -66,8 +66,14 @@ class ResolvedRange:
     hi_epoch: int
 
 
-def fail(status: int, code: str, message: str | None = None) -> None:
-    raise WebError(status, code, message or code)
+def fail(
+    status: int,
+    code: str,
+    message: str | None = None,
+    *,
+    details: dict[str, Any] | None = None,
+) -> None:
+    raise WebError(status, code, message or code, details=details)
 
 
 def serialize_utc(value: datetime | None) -> str | None:

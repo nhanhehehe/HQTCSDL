@@ -61,9 +61,8 @@ def test_downgrade_only_drops_new_columns_in_reverse_order():
     ]
 
 
-def test_alembic_has_one_head_and_preserves_foundation_chain():
+def test_pr_a_preserves_foundation_chain():
     script = ScriptDirectory(str(MIGRATIONS))
-    assert script.get_heads() == [REVISION]
     assert script.get_revision(REVISION).down_revision == PARENT
     assert script.get_revision(PARENT).down_revision == "a70b8056608d"
     assert script.get_revision("a70b8056608d").down_revision is None

@@ -130,7 +130,7 @@ def sql_g3_env():
             pytest.fail("Refusing writes: expected disposable test DB does not match")
         assert (
             conn.execute(text("SELECT version_num FROM dbo.alembic_version")).scalar_one()
-            == "fee0fa015af7"
+            == "e7c4b6a10d53"
         )
         conn.rollback()
 
@@ -439,19 +439,19 @@ def test_sql_g3_e2e_ingest_to_fl07_fl12_fl13_and_archived_farm(sql_g3_env):
     assert meas_svc.get_current(cookie, node_id=node3["id"])["state"] == "NO_EVENT_TIME"
     assert meas_svc.get_current(cookie, node_id=node_other["id"])["state"] == "NO_DATA"
 
-    # FL-12 (G3): Farm scope, Node scope, cross-farm 400, archived Farm/Zone 200
+    # FL-12 (G3+G4): Farm scope, Node scope, cross-farm 400, archived Farm/Zone 200
     dash_farm1 = dash_svc.get_dashboard(cookie, farm_id=farm1["id"])
-    assert dash_farm1["capabilities"] == {"monitoring": False, "alerts": False}
-    assert dash_farm1["active_count"] is None
+    assert dash_farm1["capabilities"] == {"monitoring": True, "alerts": True}
+    assert dash_farm1["active_count"] == "0"
     assert dash_farm1["scope"]["kind"] == "FARM"
     assert dash_farm1["scope"]["farm"]["archived_at"] is None
     by_nid = {n["profile"]["id"]: n for n in dash_farm1["nodes"]}
     assert set(by_nid.keys()) == {node1["id"], node2["id"], node3["id"]}
     for n_view in by_nid.values():
-        assert n_view["monitoring"] is None
-        assert n_view["evaluation"] is None
-        assert n_view["active_alerts"] is None
-        assert n_view["active_count"] is None
+        assert n_view["monitoring"] is not None
+        assert n_view["evaluation"] is not None
+        assert n_view["active_alerts"] == []
+        assert n_view["active_count"] == "0"
 
     assert by_nid[node1["id"]]["current"]["state"] == "AVAILABLE"
     assert by_nid[node1["id"]]["freshness"]["state"] == "FRESH"

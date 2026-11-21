@@ -6,11 +6,9 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { DashboardPage } from '../features/dashboard/DashboardPage'
 import { DevicesPanel } from '../features/devices/DevicesPanel'
 import { MeasurementsPage } from '../features/measurements/MeasurementsPage'
-import {
-  AlertDetailPlaceholderPage,
-  AlertsPlaceholderPage,
-  MonitoringPlaceholderPage,
-} from '../features/placeholders/FutureModulePages'
+import { AlertDetailPage } from '../features/alerts/AlertDetailPage'
+import { AlertsPage } from '../features/alerts/AlertsPage'
+import { MonitoringPage } from '../features/monitoring/MonitoringPage'
 import { ReportsPage } from '../features/reports/ReportsPage'
 import { DEFAULT_AUTHENTICATED_ROUTE, resolveAuthView } from './navigation'
 import { OperationalFarmProvider, OperationalFarmSelector } from './OperationalFarmContext'
@@ -27,9 +25,9 @@ function AuthenticatedRoutes() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/measurements" element={<MeasurementsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/monitoring" element={<MonitoringPlaceholderPage />} />
-          <Route path="/alerts" element={<AlertsPlaceholderPage />} />
-          <Route path="/alerts/:id" element={<AlertDetailPlaceholderPage />} />
+          <Route path="/monitoring" element={<MonitoringPage />} />
+          <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/alerts/:id" element={<AlertDetailPage />} />
           <Route path="*" element={<Navigate to={DEFAULT_AUTHENTICATED_ROUTE} replace />} />
         </Routes>
       </AppShell>

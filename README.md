@@ -9,13 +9,14 @@ Luồng dữ liệu: **Node cảm biến → Gateway (LoRa) → HTTP API → SQL
 | Nhóm | Chức năng |
 | --- | --- |
 | Xác thực | Đăng nhập/đăng xuất Admin, session cookie HttpOnly và CSRF |
-| Quản trị | Tạo/xem/sửa Farm, Zone, Gateway, Node; archive/restore khu vực; cấp/thu hồi Gateway API key |
+| Quản trị | Tạo/xem/sửa Farm, Zone, Gateway, Node; archive/restore khu vực; bật/tắt quyền tiếp nhận Node/Gateway; cấp/thu hồi Gateway API key |
 | Thu thập | Nhận batch số đo qua `POST /api/v1/ingestion/measurements`; chống trùng, ACK2, retry bằng Gateway Simulator |
 | Dữ liệu | Số đo hiện tại, lịch sử, API chuỗi dữ liệu, độ mới (freshness) |
-| Dashboard | Tổng quan Farm/Node và số đo; **chưa có cảnh báo** |
+| Dashboard | Tổng quan Farm/Node, số đo mới nhất, trạng thái đối soát và cảnh báo hiệu lực toàn Farm |
+| Giám sát & Cảnh báo | Cấu hình ngưỡng 5 đại lượng, timeout, worker nền đối soát/replay, tra cứu & xác nhận cảnh báo kèm lịch sử audit |
 | Báo cáo | Thống kê 5 đại lượng theo khoảng thời gian, xuất CSV theo snapshot |
 
-**Chưa hoàn thành:** cấu hình ngưỡng, worker giám sát/cảnh báo (G4) và thử nghiệm tích hợp phần cứng ESP32/LoRa end-to-end. Màn hình Cảnh báo/Giám sát hiện là placeholder; API chuỗi biểu đồ đã có nhưng giao diện biểu đồ chưa triển khai. Simulator **không thay thế** kiểm thử phần cứng thật.
+**Chưa hoàn thành:** giao diện vẽ biểu đồ trên web (API chuỗi dữ liệu đã có), thử nghiệm tích hợp phần cứng ESP32/LoRa end-to-end, đo kiểm hiệu năng định lượng và quy trình sao lưu/phục hồi vận hành. Simulator **không thay thế** kiểm thử phần cứng thật.
 
 ## Chạy local trên Windows (PowerShell)
 
@@ -110,7 +111,7 @@ uv run alembic upgrade head
 uv run alembic current
 ```
 
-`alembic current` cần hiển thị `fee0fa015af7` (M1 → M2 → bổ sung vòng đời Farm/Zone). **Backend không tự migrate hay seed khi khởi động.**
+`alembic current` cần hiển thị `e7c4b6a10d53` (M1 → M2 → vòng đời Farm/Zone → bảng cảnh báo/audit → chuẩn ngưỡng 2 chữ số lẻ). **Backend không tự migrate hay seed khi khởi động.**
 
 **Seed nền tảng:** trong SSMS, chọn DB `HQTCSDL_local`, mở file `database/seed_foundation.sql` (ở thư mục repo) và nhấn **Execute/F5**. Trên DB mới, seed tạo **1 Farm** `FARM-01`, **2 Zone** `INDOOR` / `OUTDOOR` và **5 MetricDefinition**; chưa tạo thiết bị, số đo hay Admin.
 
@@ -129,6 +130,8 @@ Nhập mật khẩu và xác nhận khi được hỏi. `--database` chỉ **ki�
 ```powershell
 uv run uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
 ```
+
+Để bật worker đánh giá ngưỡng và timeout chạy nền trên tiến trình đơn này, đặt `HQ_MONITORING_ENABLED=true` trong `backend/.env` trước khi khởi động.
 
 **Terminal 2 — Frontend** (từ thư mục gốc repo):
 
@@ -211,10 +214,12 @@ Chọn **`FARM-01` trong bộ chọn Farm ở Topbar** (Web không tự chọn F
 
 | Trang | Kiểm tra |
 | --- | --- |
-| **Tổng quan** (`/dashboard`) | Danh sách Node, số đo mới nhất, freshness; chỉ số cảnh báo vẫn “Chờ G4” |
+| **Tổng quan** (`/dashboard`) | Danh sách Node, số đo mới nhất, freshness, trạng thái đối soát và cảnh báo hiệu lực toàn Farm |
 | **Dữ liệu đo** (`/measurements`) | Chọn Node, xem 5 chỉ số và lịch sử các `seq` đã gửi |
+| **Giám sát** (`/monitoring`) | Bật/tắt quyền tiếp nhận, cấu hình ngưỡng 5 đại lượng và timeout theo Node |
+| **Cảnh báo** (`/alerts`) | Xem cảnh báo hiệu lực/lịch sử 24h, mở chi tiết `/alerts/:id`, xác nhận và xem lịch sử audit |
 | **Báo cáo** (`/reports`) | Chọn Node/khoảng thời gian chứa số đo vừa gửi → **Tạo báo cáo** → **Xuất CSV** |
-| **Thiết bị & Khóa** (`/devices`) | Xem hồ sơ Node/Gateway, liên kết Gateway và danh sách credential |
+| **Thiết bị & Khóa** (`/devices`) | Xem hồ sơ Node/Gateway, bật/tắt quyền tiếp nhận, liên kết Gateway và danh sách credential |
 
 Báo cáo mặc định truy vấn dữ liệu theo **giờ đo hợp lệ** (`t_node`). Các số đo tạo bằng Simulator với `time_status=VALID` có thể xuất hiện trong báo cáo; số đo `UNKNOWN` được truy vấn riêng và không đưa vào thống kê này.
 

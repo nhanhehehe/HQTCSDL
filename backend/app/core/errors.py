@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import Request
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
@@ -6,10 +8,18 @@ from starlette.exceptions import HTTPException
 
 
 class WebError(Exception):
-    def __init__(self, status: int, code: str, message: str):
+    def __init__(
+        self,
+        status: int,
+        code: str,
+        message: str,
+        *,
+        details: dict[str, Any] | None = None,
+    ):
         self.status = status
         self.code = code
         self.message = message
+        self.details = details
 
 
 class IngestionError(Exception):
@@ -57,7 +67,7 @@ def ingestion_error_response(
 
 
 async def web_error(request: Request, exc: WebError) -> JSONResponse:
-    return problem(request, exc.status, exc.message, exc.code)
+    return problem(request, exc.status, exc.message, exc.code, details=exc.details)
 
 
 async def ingestion_error(request: Request, exc: IngestionError) -> JSONResponse:
@@ -71,7 +81,14 @@ async def ingestion_error(request: Request, exc: IngestionError) -> JSONResponse
     )
 
 
-def problem(request: Request, status: int, title: str, code: str | None = None) -> JSONResponse:
+def problem(
+    request: Request,
+    status: int,
+    title: str,
+    code: str | None = None,
+    *,
+    details: dict[str, Any] | None = None,
+) -> JSONResponse:
     path = request.url.path
 
     is_web = path == "/api/v1" or path.startswith("/api/v1/")
@@ -107,14 +124,18 @@ def problem(request: Request, status: int, title: str, code: str | None = None) 
             503: "STORAGE_UNAVAILABLE",
         }
 
+        error_body: dict[str, Any] = {
+            "code": code or codes.get(status, "REQUEST_FAILED"),
+            "message": title,
+            "retryable": status == 503,
+        }
+        if details is not None:
+            error_body["details"] = details
+
         return JSONResponse(
             status_code=status,
             content={
-                "error": {
-                    "code": code or codes.get(status, "REQUEST_FAILED"),
-                    "message": title,
-                    "retryable": status == 503,
-                },
+                "error": error_body,
                 "request_id": getattr(request.state, "request_id", None),
             },
             headers={"Cache-Control": "no-store"},

@@ -21,6 +21,9 @@ from app.core.errors import (
     validation_error,
     web_error,
 )
+from app.modules.alerts.router import router as alerts_router
+from app.modules.alerts.service import AlertsService
+from app.modules.alerts.worker import MonitoringWorker
 from app.modules.areas.router import router as areas_router
 from app.modules.areas.service import AreaService
 from app.modules.auth.router import router as auth_router
@@ -32,6 +35,8 @@ from app.modules.ingestion.service import IngestionService
 from app.modules.measurements.dashboard_service import DashboardService
 from app.modules.measurements.router import router as measurements_router
 from app.modules.measurements.service import MeasurementsService
+from app.modules.monitoring_config.router import router as monitoring_config_router
+from app.modules.monitoring_config.service import MonitoringConfigService
 from app.modules.reports.router import router as reports_router
 from app.modules.reports.service import ReportService
 
@@ -41,22 +46,30 @@ logger = logging.getLogger("uvicorn.error.hqtcsdl")
 def create_app(settings: Settings | None = None, frontend_dir: Path | None = None) -> FastAPI:
     settings = settings if settings is not None else Settings()
     database = Database(settings)
+    worker = MonitoringWorker(database, settings)
     static_dir = (frontend_dir or BACKEND_DIR.parent / "frontend" / "dist").resolve()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        yield
-        database.dispose()
+        worker.start()
+        try:
+            yield
+        finally:
+            worker.stop()
+            database.dispose()
 
     app = FastAPI(title="HQTCSDL", version="0.1.0", lifespan=lifespan)
     app.state.database = database
     app.state.settings = settings
+    app.state.monitoring_worker = worker
     app.state.auth = AuthService(database, settings)
     app.state.areas = AreaService(database, settings)
     app.state.devices = DeviceService(database, settings)
     app.state.ingestion = IngestionService(database, settings)
     app.state.measurements = MeasurementsService(database, settings)
     app.state.dashboard = DashboardService(database, settings)
+    app.state.monitoring_config = MonitoringConfigService(database, settings)
+    app.state.alerts = AlertsService(database, settings)
     app.state.reports = ReportService(database, settings)
     app.add_exception_handler(WebError, web_error)
     app.add_exception_handler(IngestionError, ingestion_error)
@@ -88,10 +101,15 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
 
     @app.get("/health/live")
     def live():
-        return {"status": "alive", "scope": "foundation", "monitoring": "not_implemented"}
+        return {
+            "status": "alive",
+            "scope": "foundation",
+            "monitoring": worker.health_status(),
+        }
 
     @app.get("/health/ready")
     def ready():
+        mon_status = worker.health_status()
         try:
             database.probe()
         except Exception:
@@ -101,14 +119,24 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
                     "status": "not_ready",
                     "checks": {"database": "unavailable"},
                     "scope": "foundation",
-                    "monitoring": "not_implemented",
+                    "monitoring": mon_status,
+                },
+            )
+        if worker.is_shutting_down() or mon_status not in {"disabled", "running"}:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "not_ready",
+                    "checks": {"database": "ok"},
+                    "scope": "foundation",
+                    "monitoring": mon_status,
                 },
             )
         return {
             "status": "ready",
             "checks": {"database": "ok"},
             "scope": "foundation",
-            "monitoring": "not_implemented",
+            "monitoring": mon_status,
         }
 
     app.include_router(auth_router)
@@ -116,6 +144,8 @@ def create_app(settings: Settings | None = None, frontend_dir: Path | None = Non
     app.include_router(devices_router)
     app.include_router(ingestion_router)
     app.include_router(measurements_router)
+    app.include_router(monitoring_config_router)
+    app.include_router(alerts_router)
     app.include_router(reports_router)
 
     @app.api_route(
