@@ -406,3 +406,218 @@ def update_node_runtime_active_period(
     if result.rowcount != 1:
         raise storage_error()
     return int(result.rowcount)
+
+
+def list_threshold_configs_with_settings(session, node_id: int) -> list[dict[str, Any]]:
+    cfg_rows = (
+        session.execute(
+            text(
+                "SELECT config_id, node_id, config_kind, config_no, effective_from, "
+                "effective_to, created_by, change_reason "
+                "FROM dbo.NodeConfigVersion "
+                "WHERE node_id = :node_id AND config_kind = 'THRESHOLD' "
+                "ORDER BY config_no ASC"
+            ),
+            {"node_id": int(node_id)},
+        )
+        .mappings()
+        .all()
+    )
+    if not cfg_rows:
+        return []
+    setting_rows = (
+        session.execute(
+            text(
+                "SELECT ts.config_id, ts.metric_code, ts.enabled, ts.lower_value, ts.upper_value "
+                "FROM dbo.ThresholdSetting ts "
+                "JOIN dbo.NodeConfigVersion c ON c.config_id = ts.config_id "
+                "WHERE c.node_id = :node_id AND c.config_kind = 'THRESHOLD'"
+            ),
+            {"node_id": int(node_id)},
+        )
+        .mappings()
+        .all()
+    )
+    by_cfg: dict[int, dict[str, dict[str, Any]]] = {}
+    for row in setting_rows:
+        cid = int(row["config_id"])
+        by_cfg.setdefault(cid, {})[row["metric_code"]] = dict(row)
+    result: list[dict[str, Any]] = []
+    for cfg in cfg_rows:
+        item = dict(cfg)
+        item["settings"] = by_cfg.get(int(cfg["config_id"]), {})
+        result.append(item)
+    return result
+
+
+def list_threshold_periods(session, node_id: int) -> list[dict[str, Any]]:
+    rows = (
+        session.execute(
+            text(
+                "SELECT period_id, node_id, monitoring_kind, metric_code, started_at, "
+                "ended_at, start_config_id, start_reason, end_reason "
+                "FROM dbo.MonitoringPeriod "
+                "WHERE node_id = :node_id AND monitoring_kind = 'THRESHOLD' "
+                "ORDER BY period_id ASC"
+            ),
+            {"node_id": int(node_id)},
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows]
+
+
+def get_max_raw_measurement_id(session, node_id: int) -> int | None:
+    val = session.execute(
+        text("SELECT MAX(measurement_id) FROM dbo.Measurement WHERE node_id = :node_id"),
+        {"node_id": int(node_id)},
+    ).scalar_one()
+    return int(val) if val is not None else None
+
+
+def list_valid_measurements_with_values(session, node_id: int) -> list[dict[str, Any]]:
+    meas_rows = (
+        session.execute(
+            text(
+                "SELECT measurement_id, node_id, boot_id, seq, t_node, time_status, persisted_at "
+                "FROM dbo.Measurement "
+                "WHERE node_id = :node_id AND time_status = 'VALID' AND t_node IS NOT NULL "
+                "ORDER BY measurement_id ASC"
+            ),
+            {"node_id": int(node_id)},
+        )
+        .mappings()
+        .all()
+    )
+    if not meas_rows:
+        return []
+    val_rows = (
+        session.execute(
+            text(
+                "SELECT mv.measurement_id, mv.metric_code, mv.value, mv.read_status "
+                "FROM dbo.MeasurementValue mv "
+                "JOIN dbo.Measurement m ON m.measurement_id = mv.measurement_id "
+                "WHERE m.node_id = :node_id AND m.time_status = 'VALID' AND m.t_node IS NOT NULL"
+            ),
+            {"node_id": int(node_id)},
+        )
+        .mappings()
+        .all()
+    )
+    values_by_mid: dict[int, dict[str, dict[str, Any]]] = {}
+    for row in val_rows:
+        mid = int(row["measurement_id"])
+        values_by_mid.setdefault(mid, {})[row["metric_code"]] = dict(row)
+    result: list[dict[str, Any]] = []
+    for meas in meas_rows:
+        item = dict(meas)
+        item["values"] = values_by_mid.get(int(meas["measurement_id"]), {})
+        result.append(item)
+    return result
+
+
+def has_any_threshold_episode(session, node_id: int) -> bool:
+    val = session.execute(
+        text(
+            "SELECT TOP (1) 1 FROM dbo.AlertEpisode "
+            "WHERE node_id = :node_id AND alert_kind = 'THRESHOLD'"
+        ),
+        {"node_id": int(node_id)},
+    ).scalar()
+    return val is not None
+
+
+def lock_current_threshold_episodes_with_revisions(session, node_id: int) -> list[dict[str, Any]]:
+    rows = (
+        session.execute(
+            text(
+                "SELECT e.episode_id, e.node_id, e.alert_kind, e.metric_code, "
+                "e.lifecycle_status, e.is_current, e.current_revision_no, "
+                "e.first_detected_at, e.acknowledgement_version, "
+                "r.revision_no, r.config_id, r.period_id, r.direction, "
+                "r.start_event_time, r.end_event_time, r.start_backend_at, r.end_backend_at, "
+                "r.closed_at, r.end_reason, r.start_measurement_id, r.end_measurement_id, "
+                "r.lower_snapshot, r.upper_snapshot, r.evaluated_at, r.evaluation_generation, "
+                "r.threshold_metadata_json "
+                "FROM dbo.AlertEpisode e WITH (UPDLOCK, HOLDLOCK) "
+                "LEFT JOIN dbo.AlertRevision r "
+                "ON r.episode_id = e.episode_id AND r.revision_no = e.current_revision_no "
+                "WHERE e.node_id = :node_id AND e.alert_kind = 'THRESHOLD' AND e.is_current = 1 "
+                "ORDER BY e.episode_id ASC"
+            ),
+            {"node_id": int(node_id)},
+        )
+        .mappings()
+        .all()
+    )
+    return [dict(r) for r in rows]
+
+
+def insert_alert_replacement(
+    session,
+    *,
+    old_episode_id: int,
+    old_revision_no: int,
+    new_episode_id: int,
+    new_revision_no: int,
+    created_at: datetime,
+    evaluation_generation: int,
+    reason: str,
+) -> None:
+    result = session.execute(
+        text(
+            "INSERT INTO dbo.AlertReplacement ("
+            "old_episode_id, old_revision_no, new_episode_id, new_revision_no, "
+            "created_at, evaluation_generation, reason"
+            ") VALUES ("
+            ":old_episode_id, :old_revision_no, :new_episode_id, :new_revision_no, "
+            ":created_at, :evaluation_generation, :reason"
+            ")"
+        ),
+        {
+            "old_episode_id": int(old_episode_id),
+            "old_revision_no": int(old_revision_no),
+            "new_episode_id": int(new_episode_id),
+            "new_revision_no": int(new_revision_no),
+            "created_at": created_at,
+            "evaluation_generation": int(evaluation_generation),
+            "reason": reason,
+        },
+    )
+    if result.rowcount != 1:
+        raise storage_error()
+
+
+def update_threshold_checkpoint(
+    session,
+    *,
+    node_id: int,
+    last_threshold_measurement_id: int | None,
+    last_threshold_event_at: datetime | None,
+    threshold_checkpoint_json: str,
+) -> int:
+    result = session.execute(
+        text(
+            "UPDATE dbo.EvaluationState "
+            "SET last_threshold_measurement_id = :last_mid, "
+            "last_threshold_event_at = :last_event_at, "
+            "threshold_checkpoint_json = :checkpoint_json, "
+            "last_error_code = NULL, "
+            "retry_after = NULL "
+            "WHERE node_id = :node_id"
+        ),
+        {
+            "node_id": int(node_id),
+            "last_mid": (
+                int(last_threshold_measurement_id)
+                if last_threshold_measurement_id is not None
+                else None
+            ),
+            "last_event_at": last_threshold_event_at,
+            "checkpoint_json": threshold_checkpoint_json,
+        },
+    )
+    if result.rowcount != 1:
+        raise storage_error()
+    return int(result.rowcount)
